@@ -11,6 +11,8 @@
 #   lwt switch [query] [-e] [--editor-cmd "cmd"]
 #   lwt list
 #   lwt remove [query]
+#   lwt clean [-n]
+#   lwt rename <new-name>
 #   lwt doctor
 #   lwt help [command]
 
@@ -419,6 +421,8 @@ Commands:
   switch   Switch to a worktree via fzf
   list     List worktrees with live status
   remove   Remove a worktree safely
+  clean    Remove all merged worktrees at once
+  rename   Rename a worktree and its branch
   doctor   Check required and optional tooling
   help     Show command help
 
@@ -428,6 +432,8 @@ Examples:
   lwt switch feat -e
   lwt list
   lwt remove
+  lwt clean
+  lwt rename new-name
   lwt doctor
 HELP
 }
@@ -475,6 +481,42 @@ Usage: lwt remove [query]
 
 If called inside a linked worktree, that worktree is selected automatically.
 Otherwise an fzf picker is shown.
+HELP
+}
+
+lwt::ui::help_clean() {
+  cat <<'HELP'
+Usage: lwt clean [options]
+
+Finds all merged worktrees and removes them in one go.
+
+Options:
+  -n, --dry-run    Show what would be removed without deleting anything
+  -h, --help       Show help
+
+Notes:
+  - Uses the same merge detection as lwt list (including squash-merge via gh).
+  - Skips the main repository worktree.
+  - Prompts for confirmation before deleting unless --dry-run is set.
+HELP
+}
+
+lwt::ui::help_rename() {
+  cat <<'HELP'
+Usage: lwt rename <new-name>
+
+Renames a worktree's branch and moves its directory to match.
+
+If called inside a linked worktree, that worktree is selected automatically.
+Otherwise an fzf picker is shown.
+
+Options:
+  -h, --help    Show help
+
+Notes:
+  - The main repository worktree cannot be renamed.
+  - If a remote branch exists, you'll be prompted to rename it too.
+  - If an AI agent is running in the worktree, it will need to be restarted.
 HELP
 }
 
@@ -789,6 +831,249 @@ lwt::cmd::remove() {
   fi
 }
 
+lwt::cmd::clean() {
+  local dry_run=false
+
+  while (( $# > 0 )); do
+    case "$1" in
+      -h|--help)
+        lwt::ui::help_clean
+        return 0
+        ;;
+      -n|--dry-run)
+        dry_run=true
+        ;;
+      *)
+        lwt::ui::error "Unknown option: $1"
+        return 1
+        ;;
+    esac
+    shift
+  done
+
+  lwt::status::warn_gh_limitations
+  lwt::git::fetch_all
+
+  local main_wt
+  main_wt=$(lwt::worktree::main_path) || return 1
+
+  local -a merged_paths=()
+  local -a merged_branches=()
+  local record wt_path branch
+
+  while IFS= read -r record; do
+    wt_path="${record%%$'\t'*}"
+    branch="${record#*$'\t'}"
+
+    [[ "$wt_path" == "$main_wt" ]] && continue
+
+    if lwt::status::is_merged "$branch"; then
+      merged_paths+=("$wt_path")
+      merged_branches+=("$branch")
+    fi
+  done < <(lwt::worktree::records)
+
+  if [[ ${#merged_paths[@]} -eq 0 ]]; then
+    echo "No merged worktrees found."
+    return 0
+  fi
+
+  lwt::ui::header "Merged worktrees (${#merged_paths[@]})"
+  local i
+  for ((i = 1; i <= ${#merged_paths[@]}; i++)); do
+    echo "  ${_lwt_green}✓${_lwt_reset} ${_lwt_bold}${merged_branches[$i]}${_lwt_reset} ${_lwt_dim}${merged_paths[$i]}${_lwt_reset}"
+  done
+
+  if $dry_run; then
+    echo
+    lwt::ui::hint "Dry run — nothing was removed."
+    return 0
+  fi
+
+  echo
+  if ! read -rq "?Remove all ${#merged_paths[@]} merged worktree(s)? [y/N] "; then
+    echo
+    return 0
+  fi
+  echo
+
+  local current_wt
+  current_wt=$(git rev-parse --show-toplevel 2>/dev/null)
+
+  # move to main worktree if we're inside one that will be removed
+  for ((i = 1; i <= ${#merged_paths[@]}; i++)); do
+    if [[ "$current_wt" == "${merged_paths[$i]}" ]]; then
+      cd "$main_wt" || return 1
+      break
+    fi
+  done
+
+  local removed=0
+  for ((i = 1; i <= ${#merged_paths[@]}; i++)); do
+    wt_path="${merged_paths[$i]}"
+    branch="${merged_branches[$i]}"
+
+    if git worktree remove "$wt_path" 2>/dev/null || git worktree remove --force "$wt_path" 2>/dev/null; then
+      ((removed++))
+
+      # clean up local branch
+      if [[ -n "$branch" && "$branch" != "(detached)" ]] \
+        && git show-ref --verify --quiet "refs/heads/$branch"; then
+        git branch -D "$branch" >/dev/null 2>&1
+      fi
+
+      # clean up remote branch if it still exists
+      if [[ -n "$branch" && "$branch" != "(detached)" ]] \
+        && git ls-remote --heads origin "$branch" 2>/dev/null | grep -q .; then
+        git push origin --delete "$branch" >/dev/null 2>&1
+      fi
+    else
+      lwt::ui::warn "Failed to remove $wt_path"
+    fi
+  done
+
+  git worktree prune --quiet 2>/dev/null || git worktree prune
+  echo "${_lwt_green}Cleaned $removed merged worktree(s).${_lwt_reset}"
+}
+
+lwt::cmd::rename() {
+  local new_name=""
+
+  while (( $# > 0 )); do
+    case "$1" in
+      -h|--help)
+        lwt::ui::help_rename
+        return 0
+        ;;
+      --)
+        shift
+        new_name="$1"
+        break
+        ;;
+      -*)
+        lwt::ui::error "Unknown option: $1"
+        return 1
+        ;;
+      *)
+        if [[ -z "$new_name" ]]; then
+          new_name="$1"
+        else
+          lwt::ui::error "Unexpected argument: $1"
+          return 1
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$new_name" ]]; then
+    lwt::ui::error "New name is required."
+    lwt::ui::hint "Usage: lwt rename <new-name>"
+    return 1
+  fi
+
+  # validate branch name
+  if ! git check-ref-format --allow-onelevel "$new_name" 2>/dev/null; then
+    lwt::ui::error "Invalid branch name: $new_name"
+    return 1
+  fi
+
+  if git show-ref --verify --quiet "refs/heads/$new_name" 2>/dev/null; then
+    lwt::ui::error "Branch $new_name already exists."
+    return 1
+  fi
+
+  local main_wt current_wt worktree=""
+  main_wt=$(lwt::worktree::main_path) || return 1
+  current_wt=$(git rev-parse --show-toplevel 2>/dev/null)
+
+  if [[ "$current_wt" != "$main_wt" ]]; then
+    worktree="$current_wt"
+  else
+    if ! lwt::deps::has fzf; then
+      lwt::ui::error "fzf is required to pick a worktree. Install with: brew install fzf"
+      return 1
+    fi
+
+    worktree=$(lwt::worktree::display_rows | awk -F'\t' -v main="$main_wt" '$1 != main' | \
+      fzf --ansi --height 40% --reverse --prompt="Rename worktree: " \
+      --delimiter='\t' --with-nth=2.. | awk -F'\t' '{print $1}')
+  fi
+
+  [[ -z "$worktree" ]] && return 0
+
+  local old_branch
+  old_branch=$(git -C "$worktree" branch --show-current 2>/dev/null)
+
+  if [[ -z "$old_branch" || "$old_branch" == "(detached)" ]]; then
+    lwt::ui::error "Cannot rename a detached HEAD worktree."
+    return 1
+  fi
+
+  local project base new_path
+  project=$(basename "$main_wt")
+  base="$main_wt/../.worktrees/$project"
+  new_path="$base/$new_name"
+
+  if [[ -e "$new_path" ]]; then
+    lwt::ui::error "Target path already exists: $new_path"
+    return 1
+  fi
+
+  local has_remote=false
+  if git ls-remote --heads origin "$old_branch" 2>/dev/null | grep -q .; then
+    has_remote=true
+  fi
+
+  lwt::ui::header "Rename worktree"
+  echo "  ${_lwt_bold}$old_branch${_lwt_reset} → ${_lwt_bold}$new_name${_lwt_reset}"
+  echo "  ${_lwt_dim}$worktree${_lwt_reset}"
+  $has_remote && echo "  Remote branch ${_lwt_bold}origin/$old_branch${_lwt_reset} exists and will be updated."
+  echo
+  lwt::ui::warn "If an AI agent is running in this worktree, it will lose its"
+  lwt::ui::warn "working directory and may lose conversation history. You'll need"
+  lwt::ui::warn "to restart the agent after renaming."
+
+  echo
+  if ! read -rq "?Rename? [y/N] "; then
+    echo
+    return 0
+  fi
+  echo
+
+  # rename the branch
+  git branch -m "$old_branch" "$new_name" || return 1
+
+  # move the worktree directory
+  git worktree move "$worktree" "$new_path" || {
+    # rollback branch rename on failure
+    git branch -m "$new_name" "$old_branch" 2>/dev/null
+    lwt::ui::error "Failed to move worktree directory."
+    return 1
+  }
+
+  # if we were cd'd into the old worktree, cd into the new one
+  if [[ "$current_wt" == "$worktree" ]]; then
+    cd "$new_path" || return 1
+  fi
+
+  echo "${_lwt_green}Renamed worktree.${_lwt_reset}"
+
+  # handle remote branch
+  if $has_remote; then
+    if read -rq "?Rename remote branch (push new, delete old)? [y/N] "; then
+      echo
+      git -C "$new_path" push origin "$new_name" 2>/dev/null \
+        && git push origin --delete "$old_branch" 2>/dev/null \
+        && git -C "$new_path" branch --set-upstream-to="origin/$new_name" "$new_name" 2>/dev/null \
+        && echo "Renamed remote branch ${_lwt_bold}origin/$old_branch${_lwt_reset} → ${_lwt_bold}origin/$new_name${_lwt_reset}."
+    else
+      echo
+      lwt::ui::hint "Remote branch origin/$old_branch was kept. Local branch now tracks nothing."
+    fi
+  fi
+}
+
 lwt::cmd::doctor() {
   lwt::ui::header "lwt doctor"
 
@@ -885,6 +1170,16 @@ lwt::dispatch() {
       lwt::git::resolve_default_branch
       lwt::cmd::remove "$@"
       ;;
+    clean)
+      lwt::git::ensure_repo || return 1
+      lwt::git::resolve_default_branch
+      lwt::cmd::clean "$@"
+      ;;
+    rename)
+      lwt::git::ensure_repo || return 1
+      lwt::git::resolve_default_branch
+      lwt::cmd::rename "$@"
+      ;;
     doctor)
       lwt::cmd::doctor "$@"
       ;;
@@ -901,6 +1196,12 @@ lwt::dispatch() {
           ;;
         remove)
           lwt::ui::help_remove
+          ;;
+        clean)
+          lwt::ui::help_clean
+          ;;
+        rename)
+          lwt::ui::help_rename
           ;;
         doctor)
           lwt::ui::help_doctor

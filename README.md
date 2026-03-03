@@ -27,6 +27,8 @@ lwt add [branch] [-e] [-claude|-codex|-gemini "prompt"]
 lwt switch [query] [-e]
 lwt list
 lwt remove [query]
+lwt clean [-n]
+lwt rename <new-name>
 lwt doctor
 lwt help [command]
 ```
@@ -40,6 +42,9 @@ lwt add feat-onboarding -e       # same, but open in your editor
 lwt switch auth -e               # fuzzy-find and switch to a worktree
 lwt list                         # see all worktrees with live status
 lwt remove                       # pick a worktree to safely remove
+lwt clean                        # remove all merged worktrees at once
+lwt clean -n                     # dry run — see what would be removed
+lwt rename new-api-name          # rename current worktree + branch
 ```
 
 ## Remote-Aware Status
@@ -83,6 +88,18 @@ This keeps your project root and sibling repos clean while making worktrees easy
 - Uses `git worktree remove` as the primary path
 - Only forces removal after explicit confirmation
 - Offers local and remote branch cleanup after removal
+
+## Bulk Cleanup
+
+`lwt clean` finds all merged worktrees and removes them in one go — worktrees, local branches, and remote branches. Uses the same merge detection as `lwt list` (including squash-merge via `gh`).
+
+Use `lwt clean -n` to preview what would be removed without deleting anything.
+
+## Rename
+
+`lwt rename <new-name>` renames a worktree's branch and moves its directory to match — atomically. If called from inside a linked worktree, it renames that one. Otherwise an fzf picker is shown.
+
+If the branch has been pushed, you'll be prompted to rename the remote branch too. If an AI agent is running in the worktree, you'll be warned that it will need to be restarted after the rename.
 
 ## Editor Integration
 
