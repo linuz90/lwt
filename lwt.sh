@@ -876,6 +876,20 @@ lwt::cmd::remove() {
     ((behind > 0)) && echo "  ${_lwt_dim}↓ $behind commit(s) behind remote${_lwt_reset}"
   fi
 
+  # detect open PR (used for pre-deletion info and post-deletion cleanup)
+  local _rm_pr_num="" _rm_pr_link=""
+  lwt::status::init_gh_mode
+  if [[ "$LWT_GH_MODE" == "ok" && -n "$branch" ]]; then
+    local _rm_pr_raw
+    _rm_pr_raw=$(gh pr list --head "$branch" --state open --json number,url -q '.[0] | "PR #\(.number)\t\(.url)"' 2>/dev/null)
+    if [[ -n "$_rm_pr_raw" ]]; then
+      _rm_pr_num="${_rm_pr_raw%%$'\t'*}"
+      _rm_pr_link="${_rm_pr_raw#*$'\t'}"
+      printf '  %s\e]8;;%s\e\\%s\e]8;;\e\\ is open on this branch.%s\n' \
+        "$_lwt_dim" "$_rm_pr_link" "$_rm_pr_num" "$_lwt_reset"
+    fi
+  fi
+
   if ! read -rq "?${_lwt_red}Delete worktree permanently? [y/N]${_lwt_reset} "; then
     echo
     return 0
@@ -916,13 +930,33 @@ lwt::cmd::remove() {
     fi
   fi
 
-  if $merged && [[ -n "$branch" ]] && git ls-remote --heads origin "$branch" 2>/dev/null | grep -q .; then
-    echo "Remote branch ${_lwt_bold}origin/$branch${_lwt_reset} still exists (PR merged)."
-    if read -rq "?Delete remote branch? [y/N] "; then
-      echo
-      git push origin --delete "$branch" 2>/dev/null && lwt::ui::step "Deleted remote branch origin/$branch"
+  # remote cleanup: offer to delete remote branch (and close open PR if any)
+  if [[ -n "$branch" && "$branch" != "$LWT_DEFAULT_BRANCH" && "$branch" != "main" && "$branch" != "master" ]] \
+    && git ls-remote --heads origin "$branch" 2>/dev/null | grep -q .; then
+    echo
+    if [[ -n "$_rm_pr_num" ]]; then
+      # open PR exists — close it and delete remote branch together
+      printf '  Remote branch %sorigin/%s%s still exists.\n' "$_lwt_bold" "$branch" "$_lwt_reset"
+      printf '  %s\e]8;;%s\e\\%s\e]8;;\e\\%s is still open.\n' \
+        "$_lwt_dim" "$_rm_pr_link" "$_rm_pr_num" "$_lwt_reset"
+      if read -rq "?${_lwt_red}Close PR and delete remote branch? [y/N]${_lwt_reset} "; then
+        echo
+        gh pr close "${_rm_pr_num#PR #}" --delete-branch >/dev/null 2>&1 \
+          && lwt::ui::step "Closed $_rm_pr_num and deleted remote branch origin/$branch" \
+          || lwt::ui::warn "Failed to close PR or delete remote branch."
+      else
+        echo
+      fi
     else
-      echo
+      # no open PR — just offer remote branch deletion
+      printf '  Remote branch %sorigin/%s%s still exists.\n' "$_lwt_bold" "$branch" "$_lwt_reset"
+      if read -rq "?${_lwt_red}Delete remote branch? [y/N]${_lwt_reset} "; then
+        echo
+        git push origin --delete "$branch" 2>/dev/null \
+          && lwt::ui::step "Deleted remote branch origin/$branch"
+      else
+        echo
+      fi
     fi
   fi
 
@@ -1154,7 +1188,6 @@ lwt::cmd::rename() {
   fi
 
   lwt::ui::header "Rename worktree"
-  echo
   echo "  ${_lwt_orange}${_lwt_bold}$old_branch${_lwt_reset} → ${_lwt_green}${_lwt_bold}$new_name${_lwt_reset}"
   echo "  ${_lwt_dim}$worktree${_lwt_reset}"
   if $has_remote; then

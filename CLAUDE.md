@@ -16,7 +16,7 @@ This catches runtime errors (bad math expressions, missing variables, syntax iss
 
 All commands live in `lwt.sh` as `lwt::cmd::<name>()` functions. Key sections:
 
-- **UI helpers** (`lwt::ui::*`): error, warn, hint, header, success, step — use unicode symbols (✗, ⚠, ✓, ›). Always add an empty line after important headers for readability.
+- **UI helpers** (`lwt::ui::*`): error, warn, hint, header, success, step — use unicode symbols (✗, ⚠, ✓, ›)
 - **Git utilities** (`lwt::git::*`): repo detection, default branch resolution, stale fetch
 - **Status** (`lwt::status::*`): merge detection, per-worktree flags, gh mode
 - **Worktree display** (`lwt::worktree::*`): parallel status computation for list/selectors
