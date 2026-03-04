@@ -49,6 +49,14 @@ lwt::ui::header() {
   echo "${_lwt_bold}$*${_lwt_reset}"
 }
 
+lwt::ui::success() {
+  echo "${_lwt_green}$*${_lwt_reset}"
+}
+
+lwt::ui::step() {
+  echo "${_lwt_dim}> $*${_lwt_reset}"
+}
+
 lwt::git::ensure_repo() {
   if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     lwt::ui::error "Not inside a Git repository."
@@ -381,21 +389,24 @@ lwt::utils::copy_env_files() {
     cp "$file" "$dest_dir/" && ((env_count++))
   done < <(find "$repo_root" -type f -name '.env*' -print0 2>/dev/null)
 
-  ((env_count > 0)) && echo "Copied $env_count .env file(s)"
+  if ((env_count > 0)); then
+    local s="s"; ((env_count == 1)) && s=""
+    lwt::ui::step "Copied $env_count .env file$s"
+  fi
 }
 
 lwt::utils::install_dependencies() {
   if [[ -f "pnpm-lock.yaml" ]]; then
-    echo "Running pnpm install..."
+    lwt::ui::step "Installing dependencies..."
     pnpm install
   elif [[ -f "bun.lockb" || -f "bun.lock" ]]; then
-    echo "Running bun install..."
+    lwt::ui::step "Installing dependencies..."
     bun install
   elif [[ -f "yarn.lock" ]]; then
-    echo "Running yarn install..."
+    lwt::ui::step "Installing dependencies..."
     yarn install
   elif [[ -f "package-lock.json" ]]; then
-    echo "Running npm install..."
+    lwt::ui::step "Installing dependencies..."
     npm install
   fi
 }
@@ -418,7 +429,7 @@ lwt::agent::launch() {
     [[ "$configured" == "yolo" ]] && yolo=true
   fi
 
-  echo "Launching $agent..."
+  lwt::ui::step "Launching $agent..."
   case "$agent" in
     claude)
       if [[ "$yolo" == "true" ]]; then
@@ -445,126 +456,110 @@ lwt::agent::launch() {
 }
 
 lwt::ui::help_main() {
-  cat <<'HELP'
-Usage: lwt <command> [options]
-
-Commands:
-  add, a       Create or check out a worktree branch
-  switch, s    Switch to a worktree via fzf
-  list, ls     List worktrees with live status
-  remove, rm   Remove a worktree safely
-  clean        Remove all merged worktrees at once
-  rename, rn   Rename a worktree and its branch
-  doctor       Check required and optional tooling
-  help         Show command help
-
-Examples:
-  lwt a my-feature                           Create a new worktree
-  lwt a my-feature -e                        Create and open in editor
-  lwt a my-feature -s                        Create and install dependencies
-  lwt a my-feature -claude "fix..."          Create and launch an agent
-  lwt a my-feature -yolo -claude "fix..."    Launch agent with full auto-approve
-  lwt s                                      Switch worktree with fzf
-  lwt ls                                     List all worktrees
-  lwt rm                                     Pick and remove a worktree
-
-Config:
-  git config lwt.editor code         Editor to open worktrees in (e.g. code for VS Code)
-  git config lwt.agent-mode yolo     Auto-approve all agent actions (use with caution)
-HELP
+  echo "${_lwt_bold}Usage:${_lwt_reset} lwt <command> [options]"
+  echo
+  lwt::ui::header "Commands"
+  echo "  ${_lwt_bold}add, a${_lwt_reset}       ${_lwt_dim}Create or check out a worktree branch${_lwt_reset}"
+  echo "  ${_lwt_bold}switch, s${_lwt_reset}    ${_lwt_dim}Switch to a worktree via fzf${_lwt_reset}"
+  echo "  ${_lwt_bold}list, ls${_lwt_reset}     ${_lwt_dim}List worktrees with live status${_lwt_reset}"
+  echo "  ${_lwt_bold}remove, rm${_lwt_reset}   ${_lwt_dim}Remove a worktree safely${_lwt_reset}"
+  echo "  ${_lwt_bold}clean${_lwt_reset}        ${_lwt_dim}Remove all merged worktrees at once${_lwt_reset}"
+  echo "  ${_lwt_bold}rename, rn${_lwt_reset}   ${_lwt_dim}Rename a worktree and its branch${_lwt_reset}"
+  echo "  ${_lwt_bold}doctor${_lwt_reset}       ${_lwt_dim}Check required and optional tooling${_lwt_reset}"
+  echo "  ${_lwt_bold}help${_lwt_reset}         ${_lwt_dim}Show command help${_lwt_reset}"
+  echo
+  lwt::ui::header "Examples"
+  echo "  lwt a my-feature                           ${_lwt_dim}Create a new worktree${_lwt_reset}"
+  echo "  lwt a my-feature -e                        ${_lwt_dim}Create and open in editor${_lwt_reset}"
+  echo "  lwt a my-feature -s                        ${_lwt_dim}Create and install dependencies${_lwt_reset}"
+  echo "  lwt a my-feature -claude \"fix...\"          ${_lwt_dim}Create and launch an agent${_lwt_reset}"
+  echo "  lwt a my-feature -yolo -claude \"fix...\"    ${_lwt_dim}Launch agent with full auto-approve${_lwt_reset}"
+  echo "  lwt s                                      ${_lwt_dim}Switch worktree with fzf${_lwt_reset}"
+  echo "  lwt ls                                     ${_lwt_dim}List all worktrees${_lwt_reset}"
+  echo "  lwt rm                                     ${_lwt_dim}Pick and remove a worktree${_lwt_reset}"
+  echo
+  lwt::ui::header "Config"
+  echo "  git config lwt.editor code         ${_lwt_dim}Editor to open worktrees in${_lwt_reset}"
+  echo "  git config lwt.agent-mode yolo     ${_lwt_dim}Auto-approve all agent actions${_lwt_reset}"
 }
 
 lwt::ui::help_add() {
-  cat <<'HELP'
-Usage: lwt add [branch] [options]
-
-Options:
-  -s, --setup            Install dependencies after creating the worktree
-  -e, --editor           Open the worktree in your editor
-  --editor-cmd "cmd"     Override editor command for this run
-  -claude "prompt"       Launch Claude after setup
-  -codex "prompt"        Launch Codex after setup
-  -gemini "prompt"       Launch Gemini after setup
-  -yolo                  Give the agent full auto-approve permissions
-  -h, --help             Show help
-
-Notes:
-  - If branch is omitted, lwt generates a random branch name.
-  - New branches are created from the resolved default branch.
-  - When an agent flag is used, dependencies are always installed.
-HELP
+  echo "${_lwt_bold}Usage:${_lwt_reset} lwt add [branch] [options]"
+  echo
+  lwt::ui::header "Options"
+  echo "  ${_lwt_bold}-s, --setup${_lwt_reset}            ${_lwt_dim}Install dependencies after creating the worktree${_lwt_reset}"
+  echo "  ${_lwt_bold}-e, --editor${_lwt_reset}           ${_lwt_dim}Open the worktree in your editor${_lwt_reset}"
+  echo "  ${_lwt_bold}--editor-cmd \"cmd\"${_lwt_reset}     ${_lwt_dim}Override editor command for this run${_lwt_reset}"
+  echo "  ${_lwt_bold}-claude \"prompt\"${_lwt_reset}       ${_lwt_dim}Launch Claude after setup${_lwt_reset}"
+  echo "  ${_lwt_bold}-codex \"prompt\"${_lwt_reset}        ${_lwt_dim}Launch Codex after setup${_lwt_reset}"
+  echo "  ${_lwt_bold}-gemini \"prompt\"${_lwt_reset}       ${_lwt_dim}Launch Gemini after setup${_lwt_reset}"
+  echo "  ${_lwt_bold}-yolo${_lwt_reset}                  ${_lwt_dim}Give the agent full auto-approve permissions${_lwt_reset}"
+  echo "  ${_lwt_bold}-h, --help${_lwt_reset}             ${_lwt_dim}Show help${_lwt_reset}"
+  echo
+  lwt::ui::header "Notes"
+  echo "  ${_lwt_dim}If branch is omitted, lwt generates a random branch name.${_lwt_reset}"
+  echo "  ${_lwt_dim}New branches are created from the resolved default branch.${_lwt_reset}"
+  echo "  ${_lwt_dim}When an agent flag is used, dependencies are always installed.${_lwt_reset}"
 }
 
 lwt::ui::help_switch() {
-  cat <<'HELP'
-Usage: lwt switch [query] [options]
-
-Options:
-  -e, --editor           Open selected worktree in your editor
-  --editor-cmd "cmd"     Override editor command for this run
-  -h, --help             Show help
-HELP
+  echo "${_lwt_bold}Usage:${_lwt_reset} lwt switch [query] [options]"
+  echo
+  lwt::ui::header "Options"
+  echo "  ${_lwt_bold}-e, --editor${_lwt_reset}           ${_lwt_dim}Open selected worktree in your editor${_lwt_reset}"
+  echo "  ${_lwt_bold}--editor-cmd \"cmd\"${_lwt_reset}     ${_lwt_dim}Override editor command for this run${_lwt_reset}"
+  echo "  ${_lwt_bold}-h, --help${_lwt_reset}             ${_lwt_dim}Show help${_lwt_reset}"
 }
 
 lwt::ui::help_list() {
-  cat <<'HELP'
-Usage: lwt list
-
-Shows all worktrees with remote-aware status.
-HELP
+  echo "${_lwt_bold}Usage:${_lwt_reset} lwt list"
+  echo
+  echo "  ${_lwt_dim}Shows all worktrees with remote-aware status.${_lwt_reset}"
 }
 
 lwt::ui::help_remove() {
-  cat <<'HELP'
-Usage: lwt remove [query]
-
-If called inside a linked worktree, that worktree is selected automatically.
-Otherwise an fzf picker is shown.
-HELP
+  echo "${_lwt_bold}Usage:${_lwt_reset} lwt remove [query]"
+  echo
+  echo "  ${_lwt_dim}If called inside a linked worktree, that worktree is selected automatically.${_lwt_reset}"
+  echo "  ${_lwt_dim}Otherwise an fzf picker is shown.${_lwt_reset}"
 }
 
 lwt::ui::help_clean() {
-  cat <<'HELP'
-Usage: lwt clean [options]
-
-Finds all merged worktrees and removes them in one go.
-
-Options:
-  -n, --dry-run    Show what would be removed without deleting anything
-  -h, --help       Show help
-
-Notes:
-  - Uses the same merge detection as lwt list (including squash-merge via gh).
-  - Skips the main repository worktree.
-  - Prompts for confirmation before deleting unless --dry-run is set.
-HELP
+  echo "${_lwt_bold}Usage:${_lwt_reset} lwt clean [options]"
+  echo
+  echo "  ${_lwt_dim}Finds all merged worktrees and removes them in one go.${_lwt_reset}"
+  echo
+  lwt::ui::header "Options"
+  echo "  ${_lwt_bold}-n, --dry-run${_lwt_reset}    ${_lwt_dim}Show what would be removed without deleting anything${_lwt_reset}"
+  echo "  ${_lwt_bold}-h, --help${_lwt_reset}       ${_lwt_dim}Show help${_lwt_reset}"
+  echo
+  lwt::ui::header "Notes"
+  echo "  ${_lwt_dim}Uses the same merge detection as lwt list (including squash-merge via gh).${_lwt_reset}"
+  echo "  ${_lwt_dim}Skips the main repository worktree.${_lwt_reset}"
+  echo "  ${_lwt_dim}Prompts for confirmation before deleting unless --dry-run is set.${_lwt_reset}"
 }
 
 lwt::ui::help_rename() {
-  cat <<'HELP'
-Usage: lwt rename <new-name>
-
-Renames a worktree's branch and moves its directory to match.
-
-If called inside a linked worktree, that worktree is selected automatically.
-Otherwise an fzf picker is shown.
-
-Options:
-  -h, --help    Show help
-
-Notes:
-  - The main repository worktree cannot be renamed.
-  - If a remote branch exists, you'll be prompted to rename it too.
-  - If an AI agent is running in the worktree, it will need to be restarted.
-HELP
+  echo "${_lwt_bold}Usage:${_lwt_reset} lwt rename <new-name>"
+  echo
+  echo "  ${_lwt_dim}Renames a worktree's branch and moves its directory to match.${_lwt_reset}"
+  echo
+  echo "  ${_lwt_dim}If called inside a linked worktree, that worktree is selected automatically.${_lwt_reset}"
+  echo "  ${_lwt_dim}Otherwise an fzf picker is shown.${_lwt_reset}"
+  echo
+  lwt::ui::header "Options"
+  echo "  ${_lwt_bold}-h, --help${_lwt_reset}    ${_lwt_dim}Show help${_lwt_reset}"
+  echo
+  lwt::ui::header "Notes"
+  echo "  ${_lwt_dim}The main repository worktree cannot be renamed.${_lwt_reset}"
+  echo "  ${_lwt_dim}If a remote branch exists, you'll be prompted to rename it too.${_lwt_reset}"
+  echo "  ${_lwt_dim}If an AI agent is running in the worktree, it will need to be restarted.${_lwt_reset}"
 }
 
 lwt::ui::help_doctor() {
-  cat <<'HELP'
-Usage: lwt doctor
-
-Checks required dependencies and optional integrations.
-HELP
+  echo "${_lwt_bold}Usage:${_lwt_reset} lwt doctor"
+  echo
+  echo "  ${_lwt_dim}Checks required dependencies and optional integrations.${_lwt_reset}"
 }
 
 lwt::cmd::list() {
@@ -686,7 +681,9 @@ lwt::cmd::add() {
         fi
         ;;
       *)
-        if [[ -z "$branch" ]]; then
+        if [[ -n "$agent" ]]; then
+          prompt="$prompt${prompt:+ }$1"
+        elif [[ -z "$branch" ]]; then
           branch="$1"
         else
           prompt="$prompt${prompt:+ }$1"
@@ -723,22 +720,38 @@ lwt::cmd::add() {
   local start_ref="$LWT_DEFAULT_BASE_REF"
   git rev-parse --verify "$start_ref" >/dev/null 2>&1 || start_ref="HEAD"
 
+  local git_err
   if git show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null; then
     if ! read -rq "?Branch $branch exists locally. Check out into a worktree? [y/N] "; then
       echo
       return 1
     fi
     echo
-    git worktree add "$target" "$branch" || return 1
+    git_err=$(git worktree add "$target" "$branch" 2>&1) || {
+      lwt::ui::error "Failed to create worktree."
+      lwt::ui::hint "$git_err"
+      return 1
+    }
+    lwt::ui::step "Checked out existing branch ${_lwt_bold}$branch${_lwt_reset}"
   elif git show-ref --verify --quiet "refs/remotes/origin/$branch" 2>/dev/null; then
     if ! read -rq "?Branch $branch exists on origin. Check out into a worktree? [y/N] "; then
       echo
       return 1
     fi
     echo
-    git worktree add --track -b "$branch" "$target" "origin/$branch" || return 1
+    git_err=$(git worktree add --track -b "$branch" "$target" "origin/$branch" 2>&1) || {
+      lwt::ui::error "Failed to create worktree."
+      lwt::ui::hint "$git_err"
+      return 1
+    }
+    lwt::ui::step "Checked out existing branch ${_lwt_bold}$branch${_lwt_reset}${_lwt_dim} from origin"
   else
-    git worktree add -b "$branch" "$target" "$start_ref" || return 1
+    git_err=$(git worktree add -b "$branch" "$target" "$start_ref" 2>&1) || {
+      lwt::ui::error "Failed to create worktree."
+      lwt::ui::hint "$git_err"
+      return 1
+    }
+    lwt::ui::step "Created branch ${_lwt_bold}$branch${_lwt_reset}${_lwt_dim} from ${LWT_DEFAULT_BASE_REF}"
   fi
 
   lwt::utils::copy_env_files "$repo_root" "$target"
@@ -748,6 +761,8 @@ lwt::cmd::add() {
   if $run_setup || [[ -n "$agent" ]]; then
     lwt::utils::install_dependencies
   fi
+
+  lwt::ui::success "Created worktree ${branch}."
 
   if $open_editor; then
     lwt::editor::open "$target" "$editor_override"
@@ -850,22 +865,21 @@ lwt::cmd::remove() {
   fi
 
   git worktree prune --quiet 2>/dev/null || git worktree prune
-  echo "${_lwt_green}Removed worktree.${_lwt_reset}"
 
   if [[ -n "$branch" && "$branch" != "$LWT_DEFAULT_BRANCH" && "$branch" != "main" && "$branch" != "master" ]] \
     && git show-ref --verify --quiet "refs/heads/$branch"; then
     if git branch -d "$branch" >/dev/null 2>&1; then
-      echo "Deleted branch ${_lwt_bold}$branch${_lwt_reset}."
+      lwt::ui::step "Deleted local branch $branch"
     elif $merged; then
-      git branch -D "$branch" >/dev/null 2>&1 && echo "Deleted branch ${_lwt_bold}$branch${_lwt_reset}."
+      git branch -D "$branch" >/dev/null 2>&1 && lwt::ui::step "Deleted local branch $branch"
     else
       lwt::ui::warn "Branch $branch has unmerged work."
       if read -rq "?${_lwt_red}Force delete local branch? [y/N]${_lwt_reset} "; then
         echo
-        git branch -D "$branch" >/dev/null 2>&1 && echo "Deleted branch ${_lwt_bold}$branch${_lwt_reset}."
+        git branch -D "$branch" >/dev/null 2>&1 && lwt::ui::step "Deleted local branch $branch"
       else
         echo
-        echo "Kept branch $branch."
+        lwt::ui::hint "Kept branch $branch."
       fi
     fi
   fi
@@ -874,11 +888,13 @@ lwt::cmd::remove() {
     echo "Remote branch ${_lwt_bold}origin/$branch${_lwt_reset} still exists (PR merged)."
     if read -rq "?Delete remote branch? [y/N] "; then
       echo
-      git push origin --delete "$branch" 2>/dev/null && echo "Deleted remote branch ${_lwt_bold}origin/$branch${_lwt_reset}."
+      git push origin --delete "$branch" 2>/dev/null && lwt::ui::step "Deleted remote branch origin/$branch"
     else
       echo
     fi
   fi
+
+  lwt::ui::success "Removed worktree ${branch:-$worktree}."
 }
 
 lwt::cmd::clean() {
@@ -924,7 +940,7 @@ lwt::cmd::clean() {
   done < <(lwt::worktree::records)
 
   if [[ ${#merged_paths[@]} -eq 0 ]]; then
-    echo "No merged worktrees found."
+    lwt::ui::hint "No merged worktrees to clean up."
     return 0
   fi
 
@@ -983,7 +999,8 @@ lwt::cmd::clean() {
   done
 
   git worktree prune --quiet 2>/dev/null || git worktree prune
-  echo "${_lwt_green}Cleaned $removed merged worktree(s).${_lwt_reset}"
+  local s="s"; ((removed == 1)) && s=""
+  lwt::ui::success "Cleaned $removed merged worktree$s."
 }
 
 lwt::cmd::rename() {
@@ -1107,8 +1124,6 @@ lwt::cmd::rename() {
     cd "$new_path" || return 1
   fi
 
-  echo "${_lwt_green}Renamed worktree.${_lwt_reset}"
-
   # handle remote branch
   if $has_remote; then
     if read -rq "?Rename remote branch (push new, delete old)? [y/N] "; then
@@ -1116,12 +1131,14 @@ lwt::cmd::rename() {
       git -C "$new_path" push origin "$new_name" 2>/dev/null \
         && git push origin --delete "$old_branch" 2>/dev/null \
         && git -C "$new_path" branch --set-upstream-to="origin/$new_name" "$new_name" 2>/dev/null \
-        && echo "Renamed remote branch ${_lwt_bold}origin/$old_branch${_lwt_reset} → ${_lwt_bold}origin/$new_name${_lwt_reset}."
+        && lwt::ui::step "Renamed remote branch origin/$old_branch -> origin/$new_name"
     else
       echo
       lwt::ui::hint "Remote branch origin/$old_branch was kept. Local branch now tracks nothing."
     fi
   fi
+
+  lwt::ui::success "Renamed worktree $old_branch -> $new_name."
 }
 
 lwt::cmd::doctor() {
@@ -1138,36 +1155,36 @@ lwt::cmd::doctor() {
   fi
 
   echo
-  echo "Required tools"
+  lwt::ui::header "Required tools"
 
   if lwt::deps::has git; then
     echo "  ${_lwt_green}✓ git${_lwt_reset}"
   else
     echo "  ${_lwt_red}✗ git${_lwt_reset}"
-    echo "    Install: https://git-scm.com/downloads"
+    lwt::ui::hint "    Install: https://git-scm.com/downloads"
   fi
 
   if lwt::deps::has fzf; then
     echo "  ${_lwt_green}✓ fzf${_lwt_reset}"
   else
     echo "  ${_lwt_red}✗ fzf${_lwt_reset}"
-    echo "    Install: brew install fzf"
+    lwt::ui::hint "    Install: brew install fzf"
   fi
 
   echo
-  echo "Optional tools"
+  lwt::ui::header "Optional tools"
 
   if lwt::deps::has gh; then
     if gh auth status -h github.com >/dev/null 2>&1; then
       echo "  ${_lwt_green}✓ gh (authenticated)${_lwt_reset}"
     else
       echo "  ${_lwt_yellow}⚠ gh (not authenticated)${_lwt_reset}"
-      echo "    Run: gh auth login"
+      lwt::ui::hint "    Run: gh auth login"
     fi
   else
     echo "  ${_lwt_yellow}⚠ gh${_lwt_reset}"
-    echo "    Install: brew install gh"
-    echo "    Needed for squash-merge detection"
+    lwt::ui::hint "    Install: brew install gh"
+    lwt::ui::hint "    Needed for squash-merge detection"
   fi
 
   local agent
@@ -1180,7 +1197,7 @@ lwt::cmd::doctor() {
   done
 
   echo
-  echo "Settings"
+  lwt::ui::header "Settings"
 
   local resolved_editor
   resolved_editor=$(lwt::editor::resolve 2>/dev/null)
@@ -1188,7 +1205,7 @@ lwt::cmd::doctor() {
     echo "  ${_lwt_green}✓ editor${_lwt_reset} $resolved_editor"
   else
     echo "  ${_lwt_dim}- editor not set${_lwt_reset}"
-    echo "    Set with: git config lwt.editor zed"
+    lwt::ui::hint "    Set with: git config lwt.editor zed"
   fi
 
   local agent_mode
@@ -1202,7 +1219,7 @@ lwt::cmd::doctor() {
 
 lwt::dispatch() {
   local cmd="${1:-help}"
-  shift || true
+  (( $# > 0 )) && shift
 
   LWT_GH_MODE=""
   LWT_GH_NOTICE_PRINTED=0
