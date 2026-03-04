@@ -479,8 +479,8 @@ lwt::ui::help_main() {
   echo "  lwt rm                                     ${_lwt_dim}Pick and remove a worktree${_lwt_reset}"
   echo
   lwt::ui::header "Config"
-  echo "  git config lwt.editor code         ${_lwt_dim}Editor to open worktrees in${_lwt_reset}"
-  echo "  git config lwt.agent-mode yolo     ${_lwt_dim}Auto-approve all agent actions${_lwt_reset}"
+  echo "  git config --global lwt.editor code         ${_lwt_dim}Editor to open worktrees in${_lwt_reset}"
+  echo "  git config --global lwt.agent-mode yolo     ${_lwt_dim}Auto-approve all agent actions${_lwt_reset}"
 }
 
 lwt::ui::help_add() {
@@ -500,6 +500,7 @@ lwt::ui::help_add() {
   echo "  ${_lwt_dim}If branch is omitted, lwt generates a random branch name.${_lwt_reset}"
   echo "  ${_lwt_dim}New branches are created from the resolved default branch.${_lwt_reset}"
   echo "  ${_lwt_dim}When an agent flag is used, dependencies are always installed.${_lwt_reset}"
+  echo "  ${_lwt_dim}Set yolo globally with: git config --global lwt.agent-mode yolo${_lwt_reset}"
 }
 
 lwt::ui::help_switch() {
