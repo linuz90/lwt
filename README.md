@@ -37,19 +37,19 @@ lwt help         [command]
 
 Examples:
 
-```bash
-lwt a feat-onboarding                               # create a worktree
-lwt a feat-onboarding -s -e                          # create, install deps, open editor
-lwt a feat-api -claude "add webhook retries"         # create and launch an agent
-lwt a feat-api -yolo -codex "refactor auth module"   # agent with full auto-approve
-lwt a                                                # auto-named branch (e.g. swift-reef)
-lwt s auth -e                                        # fuzzy-find and switch to a worktree
-lwt ls                                               # list all worktrees with status
-lwt rm                                               # pick and remove a worktree
-lwt clean -n                                         # preview merged worktrees to remove
-lwt clean                                            # remove all merged worktrees
-lwt rn new-api-name                                  # rename worktree + branch
-```
+| Command | Description |
+|---------|-------------|
+| `lwt a feat-onboarding` | Create a worktree |
+| `lwt a feat-onboarding -s -e` | Create, install deps, open editor |
+| `lwt a feat-api -claude "add webhook retries"` | Create and launch an agent |
+| `lwt a feat-api -yolo -codex "refactor auth module"` | Agent with full auto-approve |
+| `lwt a` | Auto-named branch (e.g. swift-reef) |
+| `lwt s auth -e` | Fuzzy-find and switch to a worktree |
+| `lwt ls` | List all worktrees with status |
+| `lwt rm` | Pick and remove a worktree |
+| `lwt clean -n` | Preview merged worktrees to remove |
+| `lwt clean` | Remove all merged worktrees |
+| `lwt rn new-api-name` | Rename worktree + branch |
 
 ## Remote-Aware Status
 
