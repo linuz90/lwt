@@ -429,14 +429,14 @@ lwt::ui::help_main() {
 Usage: lwt <command> [options]
 
 Commands:
-  add      Create or check out a worktree branch
-  switch   Switch to a worktree via fzf
-  list     List worktrees with live status
-  remove   Remove a worktree safely
-  clean    Remove all merged worktrees at once
-  rename   Rename a worktree and its branch
-  doctor   Check required and optional tooling
-  help     Show command help
+  add, a       Create or check out a worktree branch
+  switch, s    Switch to a worktree via fzf
+  list, ls     List worktrees with live status
+  remove, rm   Remove a worktree safely
+  clean        Remove all merged worktrees at once
+  rename, rn   Rename a worktree and its branch
+  doctor       Check required and optional tooling
+  help         Show command help
 
 Examples:
   lwt add my-feature
@@ -1171,22 +1171,22 @@ lwt::dispatch() {
   LWT_GH_NOTICE_PRINTED=0
 
   case "$cmd" in
-    add)
+    add|a)
       lwt::git::ensure_repo || return 1
       lwt::git::resolve_default_branch
       lwt::cmd::add "$@"
       ;;
-    switch)
+    switch|s)
       lwt::git::ensure_repo || return 1
       lwt::git::resolve_default_branch
       lwt::cmd::switch "$@"
       ;;
-    list)
+    list|ls)
       lwt::git::ensure_repo || return 1
       lwt::git::resolve_default_branch
       lwt::cmd::list "$@"
       ;;
-    remove)
+    remove|rm)
       lwt::git::ensure_repo || return 1
       lwt::git::resolve_default_branch
       lwt::cmd::remove "$@"
@@ -1196,7 +1196,7 @@ lwt::dispatch() {
       lwt::git::resolve_default_branch
       lwt::cmd::clean "$@"
       ;;
-    rename)
+    rename|rn)
       lwt::git::ensure_repo || return 1
       lwt::git::resolve_default_branch
       lwt::cmd::rename "$@"
@@ -1206,22 +1206,22 @@ lwt::dispatch() {
       ;;
     help|-h|--help)
       case "$1" in
-        add)
+        add|a)
           lwt::ui::help_add
           ;;
-        switch)
+        switch|s)
           lwt::ui::help_switch
           ;;
-        list)
+        list|ls)
           lwt::ui::help_list
           ;;
-        remove)
+        remove|rm)
           lwt::ui::help_remove
           ;;
         clean)
           lwt::ui::help_clean
           ;;
-        rename)
+        rename|rn)
           lwt::ui::help_rename
           ;;
         doctor)
