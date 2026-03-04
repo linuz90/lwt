@@ -25,6 +25,7 @@ _lwt_dim=$'\033[2m'
 _lwt_bold=$'\033[1m'
 _lwt_reset=$'\033[0m'
 
+typeset -g LWT_VERSION="0.1.0"
 typeset -g LWT_DEFAULT_BRANCH=""
 typeset -g LWT_DEFAULT_BASE_REF=""
 typeset -g LWT_GH_MODE=""
@@ -1358,6 +1359,9 @@ lwt::dispatch() {
       ;;
     doctor)
       lwt::cmd::doctor "$@"
+      ;;
+    version|-v|--version)
+      echo "lwt $LWT_VERSION"
       ;;
     help|-h|--help)
       case "$1" in
