@@ -41,8 +41,9 @@ lwt add (a)        [branch] [-s] [-e] [-yolo]
                    [--agents claude,codex[,gemini] [prompt]]
                    [--claude|--codex|--gemini [prompt]]
                    [--<agent-combo> [prompt]]
-                   [--split "cmd"] [--tab "cmd"] [--split-dev]
+                   [--split "cmd"] [--tab "cmd"] [--split-dev] [--tab-dev]
                    [--split-claude|--split-codex|--split-gemini [prompt]]
+                   [--tab-claude|--tab-codex|--tab-gemini [prompt]]
 lwt checkout (co)  [query] [-e]
 lwt switch (s)     [query] [-e]
 lwt list (ls)
@@ -64,7 +65,9 @@ Examples:
 | `lwt a feat-auth --agents claude,codex "implement refresh token rotation"` | Run Claude here and open Codex beside it with the same prompt |
 | `lwt a feat-checkout --claude-codex-gemini "review the current checkout flow and propose the best refactor plan"` | Get three independent takes on the same problem in parallel |
 | `lwt a feat-api --codex "implement webhook retries" --split-dev` | Let Codex work while the app boots in a split         |
+| `lwt a feat-api --tab-dev`                           | Open the repo dev command in a tab instead of a split               |
 | `lwt a feat-search --split "pnpm test --watch" --tab "pnpm lint --watch"` | Open watch sessions alongside the new worktree |
+| `lwt a feat-search --tab-codex "audit the flaky search tests"` | Launch Codex in a tab for sidecar investigation                     |
 | `lwt a feat-auth --claude-codex "implement refresh token rotation"` | Use the shorter alias for the same two-agent flow |
 | `lwt a feat-auth --claude "implement refresh token rotation" --split-codex "investigate edge cases in the current auth flow and suggest tests"` | Build with one agent while another investigates in parallel |
 | `lwt a`                                              | Create a worktree with a random branch name                         |
@@ -125,12 +128,13 @@ By default, agents launch in interactive mode. Pass `-yolo` to auto-approve all 
 git config --global lwt.agent-mode yolo
 ```
 
-Split-agent flags follow the same agent behavior, but launch in a new split instead of the current shell:
+Split-agent and tab-agent flags follow the same agent behavior, but launch in a new split or tab instead of the current shell:
 
 ```bash
 lwt a feat-api --split-claude "review the auth flow"
 lwt a feat-api --split-codex "investigate flaky tests"
 lwt a feat-api --split-gemini "compare these approaches"
+lwt a feat-api --tab-codex "audit the auth flow"
 ```
 
 These differ from `--claude`, `--codex`, and `--gemini` in one important way:
@@ -138,6 +142,7 @@ These differ from `--claude`, `--codex`, and `--gemini` in one important way:
 - `--claude` / `--codex` / `--gemini` launch the agent in your current shell after `cd`-ing into the new worktree
 - `--agents claude,codex` and hyphen aliases like `--claude-codex` launch the first agent in your current shell and the rest in splits when supported
 - `--split-claude` / `--split-codex` / `--split-gemini` launch a second agent session in a new split, leaving your current shell free
+- `--tab-claude` / `--tab-codex` / `--tab-gemini` launch that agent in a new tab, leaving your current shell free
 
 ## Terminal Automation
 
@@ -147,6 +152,8 @@ These differ from `--claude`, `--codex`, and `--gemini` in one important way:
 lwt a feat-api --split "pnpm test --watch"
 lwt a feat-api --tab "pnpm lint --watch"
 lwt a feat-api --codex "fix auth" --split-dev
+lwt a feat-api --tab-dev
+lwt a feat-auth --tab-codex "audit the auth flow"
 lwt a feat-auth --agents claude,codex "fix auth edge cases"
 ```
 
@@ -155,10 +162,14 @@ What each flag does:
 - `--split "cmd"` runs any command in a new terminal split inside the new worktree
 - `--tab "cmd"` runs any command in a new terminal tab inside the new worktree
 - `--split-dev` resolves the repo's dev command and runs it in a split
+- `--tab-dev` resolves the repo's dev command and runs it in a tab
 - `--agents claude,codex` launches the first agent in your current shell and opens splits for the rest when more than one agent is requested
 - `--split-claude [prompt]` launches Claude in a split, optionally with an initial prompt
 - `--split-codex [prompt]` launches Codex in a split, optionally with an initial prompt
 - `--split-gemini [prompt]` launches Gemini in a split, optionally with an initial prompt
+- `--tab-claude [prompt]` launches Claude in a tab, optionally with an initial prompt
+- `--tab-codex [prompt]` launches Codex in a tab, optionally with an initial prompt
+- `--tab-gemini [prompt]` launches Gemini in a tab, optionally with an initial prompt
 
 You can combine multiple session flags in one command if you want the worktree, app, tests, and agents to come up together.
 
@@ -171,11 +182,17 @@ lwt a feat-checkout --split-dev
 # Codex works in the current shell, dev server runs beside it
 lwt a feat-billing --codex "fix invoice retry handling" --split-dev
 
+# Put the dev server in a tab instead of a split
+lwt a feat-billing --tab-dev
+
 # Claude runs in the current shell, Codex opens beside it
 lwt a feat-auth --agents claude,codex "implement refresh token rotation"
 
 # One extra split for tests, one extra tab for linting
 lwt a feat-search --split "pnpm test --watch" --tab "pnpm lint --watch"
+
+# Keep your main shell free and send an agent to a tab
+lwt a feat-auth --tab-codex "review the auth flow and suggest tests"
 
 # Use a second agent to investigate in parallel while the first one builds
 lwt a feat-auth --claude "implement refresh token rotation" --split-codex "investigate edge cases in the current auth flow and suggest tests"
@@ -199,9 +216,9 @@ lwt a feat-api -s                # create worktree + install deps
 
 `lwt` detects your package manager from the lockfile — pnpm, bun, yarn, or npm.
 
-When using an agent flag (`--agents`, `--claude`, `--codex`, `--gemini`, `--split-claude`, `--split-codex`, `--split-gemini`), dependencies are always installed automatically since agents need a working environment.
+When using an agent flag (`--agents`, `--claude`, `--codex`, `--gemini`, `--split-claude`, `--split-codex`, `--split-gemini`, `--tab-claude`, `--tab-codex`, `--tab-gemini`), dependencies are always installed automatically since agents need a working environment.
 
-`--split-dev` also forces setup before launching the dev command in a split. The dev command resolves in this order:
+`--split-dev` and `--tab-dev` also force setup before launching the dev command. The dev command resolves in this order:
 
 1. `git config lwt.dev-cmd`
 2. Root `package.json` `scripts.dev`, run with the detected package manager

@@ -316,6 +316,40 @@ lwt::cmd::add() {
         session_payloads+=("${1#--tab=}")
         session_prompts+=("")
         ;;
+      --tab-dev)
+        run_setup=true
+        session_modes+=("tab")
+        session_kinds+=("dev")
+        session_payloads+=("")
+        session_prompts+=("")
+        ;;
+      --tab-claude)
+        run_setup=true
+        session_modes+=("tab")
+        session_kinds+=("agent")
+        session_payloads+=("claude")
+        session_prompts+=("")
+        prompt_target="session"
+        prompt_target_index="${#session_modes[@]}"
+        ;;
+      --tab-codex)
+        run_setup=true
+        session_modes+=("tab")
+        session_kinds+=("agent")
+        session_payloads+=("codex")
+        session_prompts+=("")
+        prompt_target="session"
+        prompt_target_index="${#session_modes[@]}"
+        ;;
+      --tab-gemini)
+        run_setup=true
+        session_modes+=("tab")
+        session_kinds+=("agent")
+        session_payloads+=("gemini")
+        session_prompts+=("")
+        prompt_target="session"
+        prompt_target_index="${#session_modes[@]}"
+        ;;
       --split-dev)
         run_setup=true
         session_modes+=("split")

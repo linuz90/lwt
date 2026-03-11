@@ -13,8 +13,9 @@
 #           [--agents claude,codex[,gemini] [prompt]]
 #           [--claude|--codex|--gemini [prompt]]
 #           [--claude-codex|--codex-claude|--codex-gemini|... [prompt]]
-#           [--split "cmd"] [--tab "cmd"] [--split-dev]
+#           [--split "cmd"] [--tab "cmd"] [--split-dev] [--tab-dev]
 #           [--split-claude|--split-codex|--split-gemini [prompt]]
+#           [--tab-claude|--tab-codex|--tab-gemini [prompt]]
 #   lwt checkout [query] [-e] [--editor-cmd "cmd"]
 #   lwt switch [query] [-e] [--editor-cmd "cmd"]
 #   lwt list
