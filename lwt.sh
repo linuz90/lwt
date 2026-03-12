@@ -9,13 +9,10 @@
 # lwt.sh is the public entrypoint and sources helpers from lib/.
 #
 # Commands:
-#   lwt add [name] [-e] [--editor-cmd "cmd"]
-#           [--agents claude,codex[,gemini] [prompt]]
-#           [--claude|--codex|--gemini [prompt]]
-#           [--claude-codex|--codex-claude|--codex-gemini|... [prompt]]
-#           [--split "cmd"] [--tab "cmd"] [--split-dev] [--tab-dev]
-#           [--split-claude|--split-codex|--split-gemini [prompt]]
-#           [--tab-claude|--tab-codex|--tab-gemini [prompt]]
+#   lwt add [name] [-s] [-d] [-e] [-yolo] [--editor-cmd "cmd"]
+#           [--claude ["prompt"]] [--codex ["prompt"]] [--gemini ["prompt"]]
+#           [--agents list ["prompt"]] [--claude-codex|--codex-gemini|... ["prompt"]]
+#           [--split "cmd"] [--tab "cmd"]
 #   lwt checkout [query] [-e] [--editor-cmd "cmd"]
 #   lwt switch [query] [-e] [--editor-cmd "cmd"]
 #   lwt list

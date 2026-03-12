@@ -185,32 +185,25 @@ lwt::cmd::checkout() {
 
 lwt::cmd::add() {
   local branch=""
-  local prompt=""
   local open_editor=false
   local run_setup=false
+  local run_dev=false
   local yolo=false
   local editor_override=""
-  local trailing=""
-  local prompt_target=""
-  local prompt_target_index=0
-  local agent_spec=""
-  local normalized_agent=""
   local main_agent=""
+  local main_agent_prompt=""
   local terminal_driver=""
   local fallback_command=""
-  local agent_name=""
-  local session_prompt=""
   local session_command=""
-  local session_label=""
-  local -A requested_agents=()
-  local -a agents=()
+  local -a agent_names=()
+  local -a agent_prompts=()
   local -a runnable_agents=()
+  local -a runnable_prompts=()
   local -a missing_agents=()
   local -a parallel_agents=()
+  local -a parallel_prompts=()
   local -a session_modes=()
-  local -a session_kinds=()
   local -a session_payloads=()
-  local -a session_prompts=()
 
   while (( $# > 0 )); do
     case "$1" in
@@ -243,44 +236,77 @@ lwt::cmd::add() {
           lwt::ui::error "--agents expects a comma-separated list."
           return 1
         fi
-
-        agent_spec=$(lwt::agent::normalize_spec "$2" 2>/dev/null) || {
-          lwt::ui::error "Unsupported agent list: $2"
-          lwt::ui::hint "Supported agents: claude, codex, gemini"
-          return 1
-        }
-
-        while IFS= read -r normalized_agent; do
-          [[ -n "$normalized_agent" ]] && requested_agents[$normalized_agent]=1
-        done <<< "$agent_spec"
-
-        prompt_target="main"
+        local _as_expanded="${2//,/ }"
+        _as_expanded="${_as_expanded//-/ }"
+        local -a _as_tokens=(${=_as_expanded})
         shift
+        local _as_prompt=""
+        if [[ -n "${2:-}" && "$2" != -* ]]; then
+          _as_prompt="$2"
+          shift
+        fi
+        local _as_t
+        for _as_t in "${_as_tokens[@]}"; do
+          if ! lwt::agent::is_supported "$_as_t"; then
+            lwt::ui::error "Unsupported agent: $_as_t"
+            lwt::ui::hint "Supported agents: claude, codex, gemini"
+            return 1
+          fi
+          agent_names+=("$_as_t")
+          agent_prompts+=("$_as_prompt")
+        done
+        run_setup=true
         ;;
       --agents=*)
-        agent_spec=$(lwt::agent::normalize_spec "${1#--agents=}" 2>/dev/null) || {
-          lwt::ui::error "Unsupported agent list: ${1#--agents=}"
-          lwt::ui::hint "Supported agents: claude, codex, gemini"
-          return 1
-        }
-
-        while IFS= read -r normalized_agent; do
-          [[ -n "$normalized_agent" ]] && requested_agents[$normalized_agent]=1
-        done <<< "$agent_spec"
-
-        prompt_target="main"
+        local _ae_expanded="${${1#--agents=}//,/ }"
+        _ae_expanded="${_ae_expanded//-/ }"
+        local -a _ae_tokens=(${=_ae_expanded})
+        local _ae_prompt=""
+        if [[ -n "${2:-}" && "$2" != -* ]]; then
+          _ae_prompt="$2"
+          shift
+        fi
+        local _ae_t
+        for _ae_t in "${_ae_tokens[@]}"; do
+          if ! lwt::agent::is_supported "$_ae_t"; then
+            lwt::ui::error "Unsupported agent: $_ae_t"
+            lwt::ui::hint "Supported agents: claude, codex, gemini"
+            return 1
+          fi
+          agent_names+=("$_ae_t")
+          agent_prompts+=("$_ae_prompt")
+        done
+        run_setup=true
         ;;
       --claude)
-        requested_agents[claude]=1
-        prompt_target="main"
+        run_setup=true
+        agent_names+=("claude")
+        if [[ -n "${2:-}" && "$2" != -* ]]; then
+          agent_prompts+=("$2")
+          shift
+        else
+          agent_prompts+=("")
+        fi
         ;;
       --codex)
-        requested_agents[codex]=1
-        prompt_target="main"
+        run_setup=true
+        agent_names+=("codex")
+        if [[ -n "${2:-}" && "$2" != -* ]]; then
+          agent_prompts+=("$2")
+          shift
+        else
+          agent_prompts+=("")
+        fi
         ;;
       --gemini)
-        requested_agents[gemini]=1
-        prompt_target="main"
+        run_setup=true
+        agent_names+=("gemini")
+        if [[ -n "${2:-}" && "$2" != -* ]]; then
+          agent_prompts+=("$2")
+          shift
+        else
+          agent_prompts+=("")
+        fi
         ;;
       --split)
         if [[ -z "$2" ]]; then
@@ -288,16 +314,12 @@ lwt::cmd::add() {
           return 1
         fi
         session_modes+=("split")
-        session_kinds+=("command")
         session_payloads+=("$2")
-        session_prompts+=("")
         shift
         ;;
       --split=*)
         session_modes+=("split")
-        session_kinds+=("command")
         session_payloads+=("${1#--split=}")
-        session_prompts+=("")
         ;;
       --tab)
         if [[ -z "$2" ]]; then
@@ -305,124 +327,74 @@ lwt::cmd::add() {
           return 1
         fi
         session_modes+=("tab")
-        session_kinds+=("command")
         session_payloads+=("$2")
-        session_prompts+=("")
         shift
         ;;
       --tab=*)
         session_modes+=("tab")
-        session_kinds+=("command")
         session_payloads+=("${1#--tab=}")
-        session_prompts+=("")
         ;;
-      --tab-dev)
+      -d|--dev)
         run_setup=true
-        session_modes+=("tab")
-        session_kinds+=("dev")
-        session_payloads+=("")
-        session_prompts+=("")
+        run_dev=true
         ;;
-      --tab-claude)
-        run_setup=true
-        session_modes+=("tab")
-        session_kinds+=("agent")
-        session_payloads+=("claude")
-        session_prompts+=("")
-        prompt_target="session"
-        prompt_target_index="${#session_modes[@]}"
-        ;;
-      --tab-codex)
-        run_setup=true
-        session_modes+=("tab")
-        session_kinds+=("agent")
-        session_payloads+=("codex")
-        session_prompts+=("")
-        prompt_target="session"
-        prompt_target_index="${#session_modes[@]}"
-        ;;
-      --tab-gemini)
-        run_setup=true
-        session_modes+=("tab")
-        session_kinds+=("agent")
-        session_payloads+=("gemini")
-        session_prompts+=("")
-        prompt_target="session"
-        prompt_target_index="${#session_modes[@]}"
-        ;;
-      --split-dev)
-        run_setup=true
-        session_modes+=("split")
-        session_kinds+=("dev")
-        session_payloads+=("")
-        session_prompts+=("")
-        ;;
-      --split-claude)
-        run_setup=true
-        session_modes+=("split")
-        session_kinds+=("agent")
-        session_payloads+=("claude")
-        session_prompts+=("")
-        prompt_target="session"
-        prompt_target_index="${#session_modes[@]}"
-        ;;
-      --split-codex)
-        run_setup=true
-        session_modes+=("split")
-        session_kinds+=("agent")
-        session_payloads+=("codex")
-        session_prompts+=("")
-        prompt_target="session"
-        prompt_target_index="${#session_modes[@]}"
-        ;;
-      --split-gemini)
-        run_setup=true
-        session_modes+=("split")
-        session_kinds+=("agent")
-        session_payloads+=("gemini")
-        session_prompts+=("")
-        prompt_target="session"
-        prompt_target_index="${#session_modes[@]}"
+      --split-dev|--tab-dev|--split-claude|--tab-claude|--split-codex|--tab-codex|--split-gemini|--tab-gemini)
+        lwt::ui::error "Placement flags are no longer supported: $1"
+        lwt::ui::hint "Use --claude/--codex/--gemini directly. First agent runs here; the rest open in splits."
+        return 1
         ;;
       --)
         shift
-        while (( $# > 0 )); do
-          if [[ "$prompt_target" == "main" ]]; then
-            prompt="$prompt${prompt:+ }$1"
-          elif [[ "$prompt_target" == "session" && "$prompt_target_index" -gt 0 ]]; then
-            session_prompts[$prompt_target_index]="${session_prompts[$prompt_target_index]}${session_prompts[$prompt_target_index]:+ }$1"
-          else
-            trailing="$trailing${trailing:+ }$1"
-          fi
+        if [[ -z "$branch" && -n "${1:-}" ]]; then
+          branch="$1"
           shift
-        done
+        fi
+        if (( $# > 0 )); then
+          lwt::ui::error "Unexpected trailing arguments: $*"
+          lwt::ui::hint "Prompts must follow their agent flag: --claude \"prompt\""
+          return 1
+        fi
         break
         ;;
       --*)
-        agent_spec=$(lwt::agent::normalize_spec "${1#--}" 2>/dev/null) || {
+        # Try as agent combo (e.g. --claude-codex)
+        local _co_expanded="${${1#--}//,/ }"
+        _co_expanded="${_co_expanded//-/ }"
+        local -a _co_tokens=(${=_co_expanded})
+        local _co_valid=true
+        local _co_t
+        for _co_t in "${_co_tokens[@]}"; do
+          if ! lwt::agent::is_supported "$_co_t"; then
+            _co_valid=false
+            break
+          fi
+        done
+        if [[ "$_co_valid" != "true" || ${#_co_tokens[@]} -eq 0 ]]; then
           lwt::ui::error "Unknown option: $1"
           return 1
-        }
-
-        while IFS= read -r normalized_agent; do
-          [[ -n "$normalized_agent" ]] && requested_agents[$normalized_agent]=1
-        done <<< "$agent_spec"
-
-        prompt_target="main"
+        fi
+        local _co_prompt=""
+        if [[ -n "${2:-}" && "$2" != -* ]]; then
+          _co_prompt="$2"
+          shift
+        fi
+        for _co_t in "${_co_tokens[@]}"; do
+          agent_names+=("$_co_t")
+          agent_prompts+=("$_co_prompt")
+        done
+        run_setup=true
         ;;
       -*)
         lwt::ui::error "Unknown option: $1"
         return 1
         ;;
       *)
-        if [[ "$prompt_target" == "main" ]]; then
-          prompt="$prompt${prompt:+ }$1"
-        elif [[ "$prompt_target" == "session" && "$prompt_target_index" -gt 0 ]]; then
-          session_prompts[$prompt_target_index]="${session_prompts[$prompt_target_index]}${session_prompts[$prompt_target_index]:+ }$1"
-        elif [[ -z "$branch" ]]; then
+        if [[ -z "$branch" ]]; then
           branch="$1"
         else
-          trailing="$trailing${trailing:+ }$1"
+          lwt::ui::error "Unexpected argument: $1"
+          lwt::ui::hint "Prompts must follow their agent flag: --claude \"prompt\""
+          return 1
         fi
         ;;
     esac
@@ -433,15 +405,37 @@ lwt::cmd::add() {
     branch=$(lwt::utils::random_branch_name)
   fi
 
-  if [[ -n "$trailing" ]]; then
-    lwt::ui::error "Unexpected trailing arguments: $trailing"
-    lwt::ui::hint "Wrap commands in --split/--tab, or use an agent flag or --agents before a prompt."
-    return 1
-  fi
+  # Deduplicate agents, keeping first occurrence with its prompt
+  local -a _deduped_names=()
+  local -a _deduped_prompts=()
+  local -A _seen_agents=()
+  local _di
+  for (( _di = 1; _di <= ${#agent_names[@]}; _di++ )); do
+    if [[ -z "${_seen_agents[${agent_names[$_di]}]:-}" ]]; then
+      _seen_agents[${agent_names[$_di]}]=1
+      _deduped_names+=("${agent_names[$_di]}")
+      _deduped_prompts+=("${agent_prompts[$_di]}")
+    fi
+  done
+  agent_names=("${_deduped_names[@]}")
+  agent_prompts=("${_deduped_prompts[@]}")
 
-  while IFS= read -r normalized_agent; do
-    [[ -n "${requested_agents[$normalized_agent]:-}" ]] && agents+=("$normalized_agent")
-  done < <(lwt::agent::supported_list)
+  # Split into runnable vs missing agents
+  local _ri
+  for (( _ri = 1; _ri <= ${#agent_names[@]}; _ri++ )); do
+    if lwt::deps::has "${agent_names[$_ri]}"; then
+      runnable_agents+=("${agent_names[$_ri]}")
+      runnable_prompts+=("${agent_prompts[$_ri]}")
+    else
+      missing_agents+=("${agent_names[$_ri]}")
+    fi
+  done
+
+  # --dev: promote to split when an agent occupies the main shell
+  if $run_dev && (( ${#agent_names[@]} > 0 )); then
+    session_modes+=("split")
+    session_payloads+=("__lwt_dev__")
+  fi
 
   lwt::worktree::create_branch "$branch" true true || return 1
   local target="$LWT_LAST_WORKTREE_PATH"
@@ -449,7 +443,7 @@ lwt::cmd::add() {
 
   cd "$target" || return 1
 
-  if $run_setup || (( ${#agents[@]} > 0 )); then
+  if $run_setup || (( ${#agent_names[@]} > 0 )); then
     lwt::utils::install_dependencies
   fi
 
@@ -466,19 +460,31 @@ lwt::cmd::add() {
     [[ "$configured_agent_mode" == "yolo" ]] && resolved_yolo=true
   fi
 
-  for agent_name in "${agents[@]}"; do
-    if lwt::deps::has "$agent_name"; then
-      runnable_agents+=("$agent_name")
-    else
-      missing_agents+=("$agent_name")
-    fi
-  done
-
   for agent_name in "${missing_agents[@]}"; do
     lwt::ui::warn "$agent_name is not installed; skipping AI launch."
   done
 
-  if (( ${#session_modes[@]} > 0 || ${#agents[@]} > 1 )); then
+  # Determine main agent (first runnable) and parallel agents (rest)
+  if (( ${#runnable_agents[@]} >= 1 )); then
+    main_agent="${runnable_agents[1]}"
+    main_agent_prompt="${runnable_prompts[1]}"
+
+    if (( ${#runnable_agents[@]} > 1 )); then
+      parallel_agents=("${runnable_agents[@]:1}")
+      parallel_prompts=("${runnable_prompts[@]:1}")
+    fi
+
+    if (( ${#agent_names[@]} > ${#runnable_agents[@]} && ${#runnable_agents[@]} == 1 )); then
+      lwt::ui::warn "Only ${main_agent} is available locally; launching it in the current shell."
+    fi
+  fi
+
+  # Resolve terminal driver if splits/tabs are needed
+  local needs_terminal=false
+  (( ${#session_modes[@]} > 0 )) && needs_terminal=true
+  (( ${#parallel_agents[@]} > 0 )) && needs_terminal=true
+
+  if $needs_terminal; then
     terminal_driver=$(lwt::terminal::resolve_driver 2>/dev/null) || {
       lwt::ui::warn "Terminal automation requested, but no supported terminal driver was detected."
       lwt::ui::hint "Supported today: Ghostty and iTerm2 on macOS."
@@ -486,83 +492,70 @@ lwt::cmd::add() {
     }
   fi
 
-  if (( ${#runnable_agents[@]} == 1 )); then
-    main_agent="${runnable_agents[1]}"
-    if (( ${#agents[@]} > 1 )); then
-      lwt::ui::warn "Only ${main_agent} is available locally; launching it in the current shell."
-    fi
-  elif (( ${#runnable_agents[@]} > 1 )); then
-    main_agent="${runnable_agents[1]}"
+  # Fallback for parallel agents without terminal automation
+  if [[ -z "$terminal_driver" ]] && (( ${#parallel_agents[@]} > 0 )); then
+    lwt::ui::warn "Parallel agent launch requested, but terminal automation is unavailable."
+    lwt::ui::hint "Launching ${main_agent} in the current shell and printing commands for the rest."
 
-    if [[ -n "$terminal_driver" ]]; then
-      parallel_agents=("${runnable_agents[@]:1}")
-    else
-      lwt::ui::warn "Parallel agent launch requested, but terminal automation is unavailable."
-      lwt::ui::hint "Launching ${main_agent} in the current shell and printing commands for the rest."
-
-      for agent_name in "${runnable_agents[@]}"; do
-        [[ "$agent_name" == "$main_agent" ]] && continue
-
-        fallback_command=$(lwt::agent::command_string "$agent_name" "$prompt" "$resolved_yolo") || continue
-        lwt::ui::hint "Manual launch: cd $(lwt::shell::quote "$target") && $fallback_command"
-      done
-    fi
+    local _fi
+    for (( _fi = 1; _fi <= ${#parallel_agents[@]}; _fi++ )); do
+      fallback_command=$(lwt::agent::command_string "${parallel_agents[$_fi]}" "${parallel_prompts[$_fi]}" "$resolved_yolo") || continue
+      lwt::ui::hint "Manual launch: cd $(lwt::shell::quote "$target") && $fallback_command"
+    done
+    parallel_agents=()
+    parallel_prompts=()
   fi
 
-  local i mode kind payload
+  # Launch generic sessions (--split/--tab)
+  local i mode payload
   for (( i = 1; i <= ${#session_modes[@]}; i++ )); do
     mode="${session_modes[$i]}"
-    kind="${session_kinds[$i]}"
     payload="${session_payloads[$i]}"
-    session_prompt="${session_prompts[$i]}"
-    session_command=""
-    session_label=""
 
-    case "$kind" in
-      command)
-        session_command="$payload"
-        session_label="${mode} command"
-        ;;
-      dev)
-        if ! session_command=$(lwt::project::dev_command); then
-          lwt::ui::warn "Couldn't resolve a dev command for ${branch}; skipping ${mode}."
-          lwt::ui::hint "Set one with: git config lwt.dev-cmd \"pnpm --filter app dev\""
-          continue
-        fi
-        session_label="dev server"
-        ;;
-      agent)
-        if ! session_command=$(lwt::agent::command_string "$payload" "$session_prompt" "$resolved_yolo"); then
-          lwt::ui::warn "$payload is not installed; skipping ${mode} launch."
-          continue
-        fi
-        session_label="$payload"
-        ;;
-      *)
+    # Resolve dev sentinel
+    if [[ "$payload" == "__lwt_dev__" ]]; then
+      if ! payload=$(lwt::project::dev_command); then
+        lwt::ui::warn "Couldn't resolve a dev command for ${branch}; skipping ${mode}."
+        lwt::ui::hint "Set one with: git config lwt.dev-cmd \"pnpm --filter app dev\""
         continue
-        ;;
-    esac
+      fi
+    fi
 
     if [[ -z "$terminal_driver" ]]; then
       continue
     fi
 
-    lwt::ui::step "Opening ${mode} for ${session_label}..."
-    if ! lwt::terminal::launch "$terminal_driver" "$mode" "$target" "$session_command"; then
-      lwt::ui::warn "Failed to open ${mode} for ${session_label}."
+    lwt::ui::step "Opening ${mode}..."
+    if ! lwt::terminal::launch "$terminal_driver" "$mode" "$target" "$payload"; then
+      lwt::ui::warn "Failed to open ${mode}."
     fi
   done
 
-  for agent_name in "${parallel_agents[@]}"; do
-    session_command=$(lwt::agent::command_string "$agent_name" "$prompt" "$resolved_yolo") || continue
+  # Launch parallel agent splits
+  local _pi
+  for (( _pi = 1; _pi <= ${#parallel_agents[@]}; _pi++ )); do
+    session_command=$(lwt::agent::command_string "${parallel_agents[$_pi]}" "${parallel_prompts[$_pi]}" "$resolved_yolo") || continue
 
-    lwt::ui::step "Opening split for ${agent_name}..."
+    lwt::ui::step "Opening split for ${parallel_agents[$_pi]}..."
     if ! lwt::terminal::launch "$terminal_driver" "split" "$target" "$session_command"; then
-      lwt::ui::warn "Failed to open split for ${agent_name}."
+      lwt::ui::warn "Failed to open split for ${parallel_agents[$_pi]}."
     fi
   done
 
-  lwt::agent::launch "$main_agent" "$prompt" "$yolo"
+  # Launch main agent in current shell
+  lwt::agent::launch "$main_agent" "$main_agent_prompt" "$yolo"
+
+  # --dev without agents: run dev command in the current shell
+  if $run_dev && (( ${#agent_names[@]} == 0 )); then
+    local dev_command
+    if dev_command=$(lwt::project::dev_command); then
+      lwt::ui::step "Running dev command..."
+      eval "$dev_command"
+    else
+      lwt::ui::warn "Couldn't resolve a dev command for ${branch}."
+      lwt::ui::hint "Set one with: git config lwt.dev-cmd \"pnpm --filter app dev\""
+    fi
+  fi
 }
 
 lwt::cmd::remove() {
