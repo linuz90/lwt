@@ -20,7 +20,7 @@
 #   lwt remove [query] [-y|--yes] [-f|--force] [--delete-remote]
 #   lwt clean [-n]
 #   lwt rename <new-name>
-#   lwt config [show|get|set|unset] [--global|--local]
+#   lwt config [show|get|set|add|unset] [--global|--local]
 #   lwt hook [list|path|run] [event]
 #   lwt doctor
 #   lwt help [command|automation]

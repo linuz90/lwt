@@ -128,6 +128,70 @@ lwt::utils::copy_env_files() {
   fi
 }
 
+lwt::utils::copy_configured_paths() {
+  local repo_root="$1"
+  local target="$2"
+  local configured_paths=""
+  local rel src dest dest_dir
+  local copied_count=0
+
+  configured_paths=$(lwt::config::get_effective "copy-on-create" 2>/dev/null)
+  [[ -z "$configured_paths" || "$configured_paths" == "(unset)" ]] && return 0
+
+  while IFS= read -r rel; do
+    [[ -n "$rel" && "$rel" != "(unset)" ]] || continue
+
+    while [[ "$rel" == ./* ]]; do
+      rel="${rel#./}"
+    done
+    while [[ "$rel" == */ ]]; do
+      rel="${rel%/}"
+    done
+
+    if [[ -z "$rel" || "$rel" == "." || "$rel" == ".." ]]; then
+      lwt::ui::warn "Skipping invalid copy-on-create path."
+      continue
+    fi
+
+    case "$rel" in
+      /*)
+        lwt::ui::warn "Skipping absolute copy-on-create path: $rel"
+        continue
+        ;;
+    esac
+
+    case "/$rel/" in
+      */../*)
+        lwt::ui::warn "Skipping copy-on-create path outside repo: $rel"
+        continue
+        ;;
+    esac
+
+    src="$repo_root/$rel"
+    dest="$target/$rel"
+    dest_dir="$(dirname "$dest")"
+
+    if [[ ! -e "$src" ]]; then
+      lwt::ui::warn "Configured copy-on-create path not found: $rel"
+      continue
+    fi
+
+    mkdir -p "$dest_dir" || return 1
+    if [[ -d "$src" ]]; then
+      mkdir -p "$dest" || return 1
+      cp -R "$src"/. "$dest"/ || return 1
+    else
+      cp "$src" "$dest" || return 1
+    fi
+    ((copied_count++))
+  done <<< "$configured_paths"
+
+  if ((copied_count > 0)); then
+    local s="s"; ((copied_count == 1)) && s=""
+    lwt::ui::step "Copied $copied_count configured path$s"
+  fi
+}
+
 lwt::shell::quote() {
   printf '%q' "$1"
 }

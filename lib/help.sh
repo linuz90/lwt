@@ -39,12 +39,14 @@ lwt::ui::help_main() {
   echo "  lwt merge                                  ${_lwt_dim}Squash-merge the current worktree into the default branch${_lwt_reset}"
   echo "  lwt config show                            ${_lwt_dim}See effective settings and where they come from${_lwt_reset}"
   echo "  lwt config set dev-cmd \"pnpm dev\"         ${_lwt_dim}Persist the repo dev command${_lwt_reset}"
+  echo "  lwt config add copy-on-create apps/typefully-web/.browser-auth.json ${_lwt_dim}Copy extra project files into new worktrees${_lwt_reset}"
   echo
   lwt::ui::header "Config"
   echo "  lwt config set editor zed                   ${_lwt_dim}Editor to open worktrees in${_lwt_reset}"
   echo "  lwt config set agent-mode yolo              ${_lwt_dim}Auto-approve all agent actions${_lwt_reset}"
   echo "  lwt config set dev-cmd \"pnpm dev\"          ${_lwt_dim}Default command for --dev${_lwt_reset}"
   echo "  lwt config set terminal ghostty             ${_lwt_dim}Preferred terminal driver for splits/tabs${_lwt_reset}"
+  echo "  lwt config add copy-on-create path/to/file  ${_lwt_dim}Repeatable repo-local copies for add/checkout${_lwt_reset}"
 }
 
 lwt::ui::help_automation() {
@@ -92,6 +94,8 @@ lwt::ui::help_add() {
   echo "  ${_lwt_dim}Hyphen aliases like --claude-codex share one prompt across all agents in the alias.${_lwt_reset}"
   echo "  ${_lwt_dim}When an agent flag is used, dependencies are always installed.${_lwt_reset}"
   echo "  ${_lwt_dim}Set dev-cmd for monorepos or non-standard dev commands with lwt config set dev-cmd ...${_lwt_reset}"
+  echo "  ${_lwt_dim}Use lwt config add copy-on-create <repo-path> for extra files or directories copied into new worktrees.${_lwt_reset}"
+  echo "  ${_lwt_dim}Configured directories copy recursively into the same relative path. Use hooks only for scripted logic.${_lwt_reset}"
   echo "  ${_lwt_dim}Split/tab automation currently supports Ghostty and iTerm2 on macOS.${_lwt_reset}"
   echo "  ${_lwt_dim}Set yolo globally with: lwt config set agent-mode yolo${_lwt_reset}"
 }
@@ -202,12 +206,13 @@ lwt::ui::help_doctor() {
 }
 
 lwt::ui::help_config() {
-  echo "${_lwt_bold}Usage:${_lwt_reset} lwt config [show|get|set|unset] ..."
+  echo "${_lwt_bold}Usage:${_lwt_reset} lwt config [show|get|set|add|unset] ..."
   echo
   lwt::ui::header "Commands"
   echo "  ${_lwt_bold}show${_lwt_reset}                          ${_lwt_dim}Show the core settings you are expected to care about${_lwt_reset}"
   echo "  ${_lwt_bold}get <key>${_lwt_reset}                     ${_lwt_dim}Print a setting's effective value${_lwt_reset}"
   echo "  ${_lwt_bold}set <key> <value>${_lwt_reset}             ${_lwt_dim}Persist a setting${_lwt_reset}"
+  echo "  ${_lwt_bold}add <key> <value>${_lwt_reset}             ${_lwt_dim}Append a value to a repeatable setting${_lwt_reset}"
   echo "  ${_lwt_bold}unset <key>${_lwt_reset}                   ${_lwt_dim}Remove a persisted setting${_lwt_reset}"
   echo
   lwt::ui::header "Scope Flags"
@@ -221,18 +226,20 @@ lwt::ui::help_config() {
   echo "  ${_lwt_bold}dev-cmd${_lwt_reset}                       ${_lwt_dim}Local by default${_lwt_reset}"
   echo "  ${_lwt_bold}terminal${_lwt_reset}                      ${_lwt_dim}Global by default; auto, ghostty, iterm2${_lwt_reset}"
   echo "  ${_lwt_bold}merge-target${_lwt_reset}                  ${_lwt_dim}Local by default${_lwt_reset}"
+  echo "  ${_lwt_bold}copy-on-create${_lwt_reset}                ${_lwt_dim}Local by default; repeatable repo-relative file/dir copied by add/checkout${_lwt_reset}"
   echo
+  echo "  ${_lwt_dim}Directories configured in copy-on-create are copied recursively into the same relative path.${_lwt_reset}"
   echo "  ${_lwt_dim}Advanced hook settings exist, but they are intentionally hidden from the default output.${_lwt_reset}"
 }
 
 lwt::ui::help_hook() {
   echo "${_lwt_bold}Usage:${_lwt_reset} lwt hook <list|path|run> [event]"
   echo
-  echo "  ${_lwt_dim}Advanced workflow automation. Most users should ignore this.${_lwt_reset}"
+  echo "  ${_lwt_dim}Advanced lifecycle automation. Prefer copy-on-create for simple file or directory copies.${_lwt_reset}"
   echo
   lwt::ui::header "Why"
-  echo "  ${_lwt_dim}Use hooks when a repo always needs the same tiny setup or check step at worktree lifecycle moments.${_lwt_reset}"
-  echo "  ${_lwt_dim}Good examples: copy .env.local on create, print a local URL on switch, run a fast check before merge.${_lwt_reset}"
+  echo "  ${_lwt_dim}Use hooks when a repo always needs the same scripted setup or check step at worktree lifecycle moments.${_lwt_reset}"
+  echo "  ${_lwt_dim}Good examples: warm a cache on create, print a local URL on switch, run a fast check before merge.${_lwt_reset}"
   echo
   lwt::ui::header "Where"
   echo "  ${_lwt_dim}Repo hooks: .lwt/hooks/<event>${_lwt_reset}"

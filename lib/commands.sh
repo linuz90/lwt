@@ -26,7 +26,7 @@ lwt::cmd::config() {
       --all)
         show_all=true
         ;;
-      show|get|set|unset)
+      show|get|set|add|unset)
         action="$1"
         ;;
       *)
@@ -47,7 +47,8 @@ lwt::cmd::config() {
 
   case "$action" in
     show)
-      local item effective source description
+      local item effective source description value_line
+      local -a value_lines
       lwt::ui::header "lwt config"
       while IFS= read -r item; do
         effective=$(lwt::config::get_effective "$item" 2>/dev/null)
@@ -57,10 +58,30 @@ lwt::cmd::config() {
         [[ -z "$source" ]] && source="default"
         [[ -z "$effective" ]] && effective="(unset)"
 
-        printf '  %-18s %s%s%s  %s(%s)%s\n' \
-          "$item" \
-          "$_lwt_bold" "$effective" "$_lwt_reset" \
-          "$_lwt_dim" "$source" "$_lwt_reset"
+        value_lines=()
+        if lwt::config::is_multi_value "$item"; then
+          while IFS= read -r value_line; do
+            [[ -n "$value_line" ]] && value_lines+=("$value_line")
+          done <<< "$effective"
+        fi
+
+        if (( ${#value_lines[@]} == 0 )); then
+          printf '  %-18s %s%s%s  %s(%s)%s\n' \
+            "$item" \
+            "$_lwt_bold" "$effective" "$_lwt_reset" \
+            "$_lwt_dim" "$source" "$_lwt_reset"
+        else
+          printf '  %-18s %s%s%s  %s(%s)%s\n' \
+            "$item" \
+            "$_lwt_bold" "${value_lines[1]}" "$_lwt_reset" \
+            "$_lwt_dim" "$source" "$_lwt_reset"
+          local extra_idx
+          for (( extra_idx = 2; extra_idx <= ${#value_lines[@]}; extra_idx++ )); do
+            printf '  %-18s %s%s%s\n' \
+              "" \
+              "$_lwt_bold" "${value_lines[$extra_idx]}" "$_lwt_reset"
+          done
+        fi
         [[ -n "$description" ]] && printf '  %s%s%s\n' "$_lwt_dim" "$description" "$_lwt_reset"
       done < <(
         if $show_all; then
@@ -70,7 +91,7 @@ lwt::cmd::config() {
         fi
       )
       if ! $show_all; then
-        printf '  %sAdvanced hooks are intentionally hidden here. Use `lwt hook` if you need them.%s\n' "$_lwt_dim" "$_lwt_reset"
+        printf '  %sAdvanced hook settings are intentionally hidden here. Use `lwt hook` for scripted lifecycle automation.%s\n' "$_lwt_dim" "$_lwt_reset"
       fi
       ;;
     get)
@@ -99,6 +120,29 @@ lwt::cmd::config() {
       fi
       lwt::config::set "$scope" "$key" "$value" || return 1
       lwt::ui::success "Set $key=$value ($scope)."
+      ;;
+    add)
+      key="${positional[1]:-}"
+      value="${positional[2]:-}"
+      if [[ -z "$key" || -z "$value" ]]; then
+        lwt::ui::error "Config key and value are required."
+        lwt::ui::hint "Usage: lwt config add <key> <value> [--global|--local]"
+        return 1
+      fi
+      if ! lwt::config::is_multi_value "$key"; then
+        lwt::ui::error "Config key does not support repeated values: $key"
+        lwt::ui::hint "Use lwt config set for single-value settings."
+        return 1
+      fi
+      if [[ -z "$scope" ]]; then
+        scope=$(lwt::config::default_scope "$key") || return 1
+      fi
+      if [[ -n "$(lwt::config::get_raw "$key" "$scope" 2>/dev/null | grep -Fx -- "$value")" ]]; then
+        lwt::ui::success "$key already includes $value ($scope)."
+        return 0
+      fi
+      lwt::config::add "$scope" "$key" "$value" || return 1
+      lwt::ui::success "Added $key=$value ($scope)."
       ;;
     unset)
       key="${positional[1]:-}"

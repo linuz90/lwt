@@ -5,6 +5,7 @@ agent-mode
 dev-cmd
 terminal
 merge-target
+copy-on-create
 hook.post-create
 hook.post-switch
 hook.pre-remove
@@ -23,6 +24,7 @@ agent-mode
 dev-cmd
 terminal
 merge-target
+copy-on-create
 EOF
 }
 
@@ -34,11 +36,26 @@ lwt::config::normalize_key() {
   local key="${1:-}"
 
   case "$key" in
-    editor|agent-mode|dev-cmd|terminal|merge-target)
+    editor|agent-mode|dev-cmd|terminal|merge-target|copy-on-create)
       printf '%s\n' "$key"
       ;;
     hook.post-create|hook.post-switch|hook.pre-remove|hook.post-remove|hook.pre-rename|hook.post-rename|hook.pre-merge|hook.post-merge)
       printf '%s\n' "$key"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+lwt::config::is_multi_value() {
+  local key
+
+  key=$(lwt::config::normalize_key "$1") || return 1
+
+  case "$key" in
+    copy-on-create)
+      return 0
       ;;
     *)
       return 1
@@ -82,6 +99,9 @@ lwt::config::git_key() {
     merge-target)
       printf 'lwt.merge-target\n'
       ;;
+    copy-on-create)
+      printf 'lwt.copy-on-create\n'
+      ;;
     hook.*)
       printf 'lwt.%s\n' "$key"
       ;;
@@ -112,6 +132,9 @@ lwt::config::default_value() {
     merge-target)
       printf '%s\n' "${LWT_DEFAULT_BRANCH:-default-branch}"
       ;;
+    copy-on-create)
+      printf '%s\n' "(unset)"
+      ;;
     hook.*)
       printf '%s\n' "(unset)"
       ;;
@@ -129,13 +152,25 @@ lwt::config::get_raw() {
 
   case "$scope" in
     global)
-      git config --global --get "$git_key" 2>/dev/null
+      if lwt::config::is_multi_value "$1"; then
+        git config --global --get-all "$git_key" 2>/dev/null
+      else
+        git config --global --get "$git_key" 2>/dev/null
+      fi
       ;;
     local)
-      git config --local --get "$git_key" 2>/dev/null
+      if lwt::config::is_multi_value "$1"; then
+        git config --local --get-all "$git_key" 2>/dev/null
+      else
+        git config --local --get "$git_key" 2>/dev/null
+      fi
       ;;
     *)
-      git config --get "$git_key" 2>/dev/null
+      if lwt::config::is_multi_value "$1"; then
+        git config --get-all "$git_key" 2>/dev/null
+      else
+        git config --get "$git_key" 2>/dev/null
+      fi
       ;;
   esac
 }
@@ -191,6 +226,9 @@ lwt::config::description() {
     merge-target)
       printf 'Default target branch for merge flows\n'
       ;;
+    copy-on-create)
+      printf 'Repeatable repo-relative path copied into new worktrees; directories copy recursively\n'
+      ;;
     hook.*)
       printf 'Shell command run for %s\n' "${key#hook.}"
       ;;
@@ -223,10 +261,45 @@ lwt::config::set() {
 
   case "$scope" in
     global)
-      git config --global "$git_key" "$value"
+      if lwt::config::is_multi_value "$key"; then
+        git config --global --replace-all "$git_key" "$value"
+      else
+        git config --global "$git_key" "$value"
+      fi
       ;;
     local)
-      git config "$git_key" "$value"
+      if lwt::config::is_multi_value "$key"; then
+        git config --replace-all "$git_key" "$value"
+      else
+        git config "$git_key" "$value"
+      fi
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+lwt::config::add() {
+  local scope="$1"
+  local key="$2"
+  local value="$3"
+  local git_key
+
+  [[ -n "$scope" && -n "$key" ]] || return 1
+  git_key=$(lwt::config::git_key "$key") || return 1
+  lwt::config::is_multi_value "$key" || return 1
+
+  if [[ "$scope" == "local" ]]; then
+    lwt::config::require_local_scope || return 1
+  fi
+
+  case "$scope" in
+    global)
+      git config --global --add "$git_key" "$value"
+      ;;
+    local)
+      git config --add "$git_key" "$value"
       ;;
     *)
       return 1

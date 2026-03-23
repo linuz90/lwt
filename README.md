@@ -223,15 +223,35 @@ lwt config set terminal ghostty
 
 Use `lwt doctor` to confirm whether terminal automation is available and which driver was detected.
 
+## Copy Extra Files On Create
+
+For simple project-specific bootstrapping, use `copy-on-create` instead of a hook.
+
+Each configured path is repo-relative:
+
+- Files are copied into the same relative path in the new worktree
+- Directories are copied recursively into the same relative path
+- Missing paths warn and are skipped
+
+This is the simplest way to seed extra local-only files like browser auth state:
+
+```bash
+lwt config add copy-on-create apps/typefully-web/.browser-auth.json
+```
+
+That applies to both `lwt add` and `lwt checkout`, after `.env*` files are copied and before editors, terminals, or agents launch.
+
+Use hooks only when you need conditional or scripted behavior.
+
 ## Advanced Hooks
 
-Most users can ignore this section.
+Most users can ignore this section if `copy-on-create` is enough.
 
 `lwt` has a lightweight hook layer for teams that want a bit of automation around worktree lifecycle events. If a hook file exists, it runs automatically:
 
-Use this only when a repo repeatedly needs the same small step:
+Use this only when a repo repeatedly needs the same scripted step:
 
-- `post-create`: copy `.env.local`, warm a cache, run a tiny bootstrap
+- `post-create`: warm a cache, generate a derived file, run a tiny bootstrap
 - `post-switch`: print the local app URL or open something helpful
 - `pre-merge`: run a fast final check before `lwt merge`
 
@@ -372,6 +392,7 @@ lwt config set editor zed
 lwt config set agent-mode yolo
 lwt config set dev-cmd "pnpm --filter web dev"
 lwt config set merge-target release
+lwt config add copy-on-create apps/typefully-web/.browser-auth.json
 ```
 
 Defaults are opinionated:
@@ -386,6 +407,7 @@ Supported keys:
 - `dev-cmd`
 - `terminal`
 - `merge-target`
+- `copy-on-create` (repeatable, repo-relative path copied by `add` and `checkout`)
 
 `lwt config show` intentionally hides advanced/internal settings. The default view is meant to stay small.
 

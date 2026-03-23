@@ -168,6 +168,10 @@ lwt::worktree::create_branch() {
   fi
 
   lwt::utils::copy_env_files "$repo_root" "$target"
+  lwt::utils::copy_configured_paths "$repo_root" "$target" || {
+    lwt::ui::error "Failed to copy configured create-time paths."
+    return 1
+  }
   LWT_LAST_WORKTREE_PATH="$target"
 }
 lwt::worktree::display_rows() {
