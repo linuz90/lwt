@@ -27,7 +27,8 @@ lwt::ui::help_main() {
   echo "  lwt a existing-branch                      ${_lwt_dim}Check out an existing branch without prompting${_lwt_reset}"
   echo "  lwt a my-feature --claude \"fix...\"         ${_lwt_dim}Create and launch an agent${_lwt_reset}"
   echo "  lwt a my-feature --claude \"fix\" --codex \"review\" ${_lwt_dim}First agent here, second in split${_lwt_reset}"
-  echo "  lwt a my-feature -yolo --claude \"fix...\"   ${_lwt_dim}Launch agent with full auto-approve${_lwt_reset}"
+  echo "  lwt a my-feature -yolo --claude \"fix...\"   ${_lwt_dim}Launch agent with full auto-approve (skip all permissions)${_lwt_reset}"
+  echo "  lwt a my-feature -i --claude \"fix...\"     ${_lwt_dim}Launch agent in interactive mode (ask for every permission)${_lwt_reset}"
   echo "  lwt rm my-feature --yes                    ${_lwt_dim}Remove a worktree without an interactive prompt${_lwt_reset}"
   echo "  lwt rm my-feature --yes --force            ${_lwt_dim}Also discard local changes if needed${_lwt_reset}"
   echo "  lwt a my-feature -e                        ${_lwt_dim}Create and open in editor${_lwt_reset}"
@@ -43,7 +44,7 @@ lwt::ui::help_main() {
   echo
   lwt::ui::header "Config"
   echo "  lwt config set editor zed                   ${_lwt_dim}Editor to open worktrees in${_lwt_reset}"
-  echo "  lwt config set agent-mode yolo              ${_lwt_dim}Auto-approve all agent actions${_lwt_reset}"
+  echo "  lwt config set agent-mode auto              ${_lwt_dim}Claude auto mode (default), yolo for full skip, interactive for manual${_lwt_reset}"
   echo "  lwt config set dev-cmd \"pnpm dev\"          ${_lwt_dim}Default command for --dev${_lwt_reset}"
   echo "  lwt config set terminal ghostty             ${_lwt_dim}Preferred terminal driver for splits/tabs${_lwt_reset}"
   echo "  lwt config add copy-on-create path/to/file  ${_lwt_dim}Repeatable repo-local copies for add/checkout${_lwt_reset}"
@@ -64,7 +65,7 @@ lwt::ui::help_automation() {
   echo "  lwt rm feat-auth --yes --delete-remote     ${_lwt_dim}Also delete the remote branch or close the open PR${_lwt_reset}"
   echo
   lwt::ui::header "Agent Notes"
-  echo "  ${_lwt_dim}-yolo and agent-mode yolo control Claude/Codex/Gemini permissions, not lwt confirmations.${_lwt_reset}"
+  echo "  ${_lwt_dim}-yolo, -i, and agent-mode control Claude/Codex/Gemini permissions, not lwt confirmations.${_lwt_reset}"
   echo "  ${_lwt_dim}If you need picker-based flows, run lwt in a real TTY.${_lwt_reset}"
 }
 
@@ -82,7 +83,8 @@ lwt::ui::help_add() {
   echo "  ${_lwt_bold}--split \"cmd\"${_lwt_reset}            ${_lwt_dim}Run a command in a new terminal split${_lwt_reset}"
   echo "  ${_lwt_bold}--tab \"cmd\"${_lwt_reset}              ${_lwt_dim}Run a command in a new terminal tab${_lwt_reset}"
   echo "  ${_lwt_bold}-d, --dev${_lwt_reset}                 ${_lwt_dim}Run the repo's dev command (in place, or split if an agent is running)${_lwt_reset}"
-  echo "  ${_lwt_bold}-yolo${_lwt_reset}                    ${_lwt_dim}Give agents full auto-approve permissions${_lwt_reset}"
+  echo "  ${_lwt_bold}-yolo${_lwt_reset}                    ${_lwt_dim}Give agents full auto-approve permissions (--dangerously-skip-permissions)${_lwt_reset}"
+  echo "  ${_lwt_bold}-i, --interactive${_lwt_reset}        ${_lwt_dim}Launch agents in interactive mode (ask for every permission)${_lwt_reset}"
   echo "  ${_lwt_bold}-h, --help${_lwt_reset}               ${_lwt_dim}Show help${_lwt_reset}"
   echo
   lwt::ui::header "Notes"
@@ -97,7 +99,8 @@ lwt::ui::help_add() {
   echo "  ${_lwt_dim}Use lwt config add copy-on-create <repo-path> for extra files or directories copied into new worktrees.${_lwt_reset}"
   echo "  ${_lwt_dim}Configured directories copy recursively into the same relative path. Use hooks only for scripted logic.${_lwt_reset}"
   echo "  ${_lwt_dim}Split/tab automation currently supports Ghostty and iTerm2 on macOS.${_lwt_reset}"
-  echo "  ${_lwt_dim}Set yolo globally with: lwt config set agent-mode yolo${_lwt_reset}"
+  echo "  ${_lwt_dim}Default agent mode is auto (Claude's --enable-auto-mode). Override with -yolo or -i.${_lwt_reset}"
+  echo "  ${_lwt_dim}Set globally with: lwt config set agent-mode yolo|auto|interactive${_lwt_reset}"
 }
 
 lwt::ui::help_switch() {
@@ -222,7 +225,7 @@ lwt::ui::help_config() {
   echo
   lwt::ui::header "Keys"
   echo "  ${_lwt_bold}editor${_lwt_reset}                        ${_lwt_dim}Global by default${_lwt_reset}"
-  echo "  ${_lwt_bold}agent-mode${_lwt_reset}                    ${_lwt_dim}Global by default; interactive or yolo${_lwt_reset}"
+  echo "  ${_lwt_bold}agent-mode${_lwt_reset}                    ${_lwt_dim}Global by default; auto (default), yolo, or interactive${_lwt_reset}"
   echo "  ${_lwt_bold}dev-cmd${_lwt_reset}                       ${_lwt_dim}Local by default${_lwt_reset}"
   echo "  ${_lwt_bold}terminal${_lwt_reset}                      ${_lwt_dim}Global by default; auto, ghostty, iterm2${_lwt_reset}"
   echo "  ${_lwt_bold}merge-target${_lwt_reset}                  ${_lwt_dim}Local by default${_lwt_reset}"

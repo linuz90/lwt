@@ -38,7 +38,7 @@ Implementation note: `lwt.sh` remains the only entrypoint you source. It loads t
 ## Usage
 
 ```bash
-lwt add (a)        [branch] [-s] [-d] [-e] [-yolo]
+lwt add (a)        [branch] [-s] [-d] [-e] [-yolo] [-i]
                    [--claude ["prompt"]] [--codex ["prompt"]] [--gemini ["prompt"]]
                    [--agents list ["prompt"]] [--<agent-combo> ["prompt"]]
                    [--split "cmd"] [--tab "cmd"]
@@ -91,7 +91,7 @@ If an agent or script is driving `lwt`, prefer explicit targets over picker flow
 
 Avoid bare `lwt rm`, `lwt switch`, and `lwt checkout` in automation unless you are intentionally running them in a real TTY, because those flows rely on `fzf`.
 
-`-yolo` and `lwt config set agent-mode yolo` only affect Claude/Codex/Gemini permissions. They do not bypass `lwt` command confirmations.
+`-yolo`, `-i`, and `lwt config set agent-mode` only affect Claude/Codex/Gemini permissions. They do not bypass `lwt` command confirmations.
 
 ## Remote-Aware Status
 
@@ -166,10 +166,14 @@ The first agent flag determines which agent runs in your current shell; the rest
 lwt a feat-auth --codex "investigate edge cases" --claude "implement refresh token rotation"
 ```
 
-By default, agents launch in interactive mode. Pass `-yolo` to auto-approve all agent actions for that run, or set it globally:
+By default, agents launch in **auto mode**. For Claude, this uses `--enable-auto-mode`, which lets Claude make routine decisions autonomously while still asking for confirmation on higher-risk actions. For Codex and Gemini, auto mode is the same as interactive (plain launch, no flags) since they don't support auto mode yet.
+
+Pass `-yolo` to fully skip all permission checks (`--dangerously-skip-permissions` for Claude, `--yolo` for Codex/Gemini), or `-i`/`--interactive` for the old conservative behavior where agents ask for every permission:
 
 ```bash
-lwt config set agent-mode yolo
+lwt config set agent-mode yolo          # skip all permissions
+lwt config set agent-mode interactive   # ask for everything
+lwt config set agent-mode auto          # the default
 ```
 
 ## Terminal Automation
@@ -389,7 +393,7 @@ lwt config set editor zed
 ```bash
 lwt config show
 lwt config set editor zed
-lwt config set agent-mode yolo
+lwt config set agent-mode auto
 lwt config set dev-cmd "pnpm --filter web dev"
 lwt config set merge-target release
 lwt config add copy-on-create apps/typefully-web/.browser-auth.json

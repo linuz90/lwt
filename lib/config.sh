@@ -121,7 +121,7 @@ lwt::config::default_value() {
       printf '%s\n' "${LWT_EDITOR:-${VISUAL:-${EDITOR:-}}}"
       ;;
     agent-mode)
-      printf 'interactive\n'
+      printf 'auto\n'
       ;;
     dev-cmd)
       printf 'auto\n'
@@ -215,7 +215,7 @@ lwt::config::description() {
       printf 'Editor command used by --editor and editor-aware flows\n'
       ;;
     agent-mode)
-      printf 'Default agent approval mode for Claude, Codex, and Gemini\n'
+      printf 'Default agent permission mode: auto, yolo, or interactive\n'
       ;;
     dev-cmd)
       printf 'Project dev command used by lwt add --dev\n'
