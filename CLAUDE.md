@@ -56,6 +56,7 @@ Keep modules as pure function definitions and shared globals. Do not source indi
 - `lwt add <branch>` should stay non-interactive when the branch already exists locally or on `origin`; checking out an existing branch is the expected path, not a risky edge case.
 - `lwt remove` should preserve a clear automation path: `--yes` skips the delete prompt, `--force` handles dirty/unmerged local cleanup, and remote cleanup stays explicit behind `--delete-remote`.
 - The first-contact UX for `lwt` / `lwt --help` should teach automation-safe patterns early because agents discover the tool through help output, not just humans.
+- Default agent mode is `auto` (Claude's `--enable-auto-mode`). Codex and Gemini don't have auto mode, so `auto` behaves like `interactive` for them (plain launch, no flags). `-yolo` escalates to `--dangerously-skip-permissions` for Claude and `--yolo` for Codex/Gemini. `-i`/`--interactive` restores the old conservative behavior (ask for every permission).
 
 ## Dependencies
 

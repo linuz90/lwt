@@ -387,6 +387,7 @@ lwt::cmd::add() {
   local run_setup=false
   local run_dev=false
   local yolo=false
+  local interactive=false
   local editor_override=""
   local main_agent=""
   local main_agent_prompt=""
@@ -414,6 +415,10 @@ lwt::cmd::add() {
         ;;
       -yolo)
         yolo=true
+        ;;
+      -i|--interactive)
+        yolo=false
+        interactive=true
         ;;
       -e|--editor)
         open_editor=true
@@ -662,11 +667,15 @@ lwt::cmd::add() {
     lwt::editor::open "$target" "$editor_override"
   fi
 
-  local resolved_yolo="$yolo"
-  if [[ "$resolved_yolo" != "true" ]]; then
-    local configured_agent_mode
-    configured_agent_mode=$(lwt::config::get_effective "agent-mode" 2>/dev/null)
-    [[ "$configured_agent_mode" == "yolo" ]] && resolved_yolo=true
+  # Resolve agent mode: flag > config > default (auto)
+  local resolved_agent_mode=""
+  if [[ "$yolo" == "true" ]]; then
+    resolved_agent_mode="yolo"
+  elif [[ "$interactive" == "true" ]]; then
+    resolved_agent_mode="interactive"
+  else
+    resolved_agent_mode=$(lwt::config::get_effective "agent-mode" 2>/dev/null)
+    [[ -z "$resolved_agent_mode" ]] && resolved_agent_mode="auto"
   fi
 
   for agent_name in "${missing_agents[@]}"; do
@@ -708,7 +717,7 @@ lwt::cmd::add() {
 
     local _fi
     for (( _fi = 1; _fi <= ${#parallel_agents[@]}; _fi++ )); do
-      fallback_command=$(lwt::agent::command_string "${parallel_agents[$_fi]}" "${parallel_prompts[$_fi]}" "$resolved_yolo") || continue
+      fallback_command=$(lwt::agent::command_string "${parallel_agents[$_fi]}" "${parallel_prompts[$_fi]}" "$resolved_agent_mode") || continue
       lwt::ui::hint "Manual launch: cd $(lwt::shell::quote "$target") && $fallback_command"
     done
     parallel_agents=()
@@ -743,7 +752,7 @@ lwt::cmd::add() {
   # Launch parallel agent splits
   local _pi
   for (( _pi = 1; _pi <= ${#parallel_agents[@]}; _pi++ )); do
-    session_command=$(lwt::agent::command_string "${parallel_agents[$_pi]}" "${parallel_prompts[$_pi]}" "$resolved_yolo") || continue
+    session_command=$(lwt::agent::command_string "${parallel_agents[$_pi]}" "${parallel_prompts[$_pi]}" "$resolved_agent_mode") || continue
 
     lwt::ui::step "Opening split for ${parallel_agents[$_pi]}..."
     if ! lwt::terminal::launch "$terminal_driver" "split" "$target" "$session_command"; then
@@ -752,7 +761,7 @@ lwt::cmd::add() {
   done
 
   # Launch main agent in current shell
-  lwt::agent::launch "$main_agent" "$main_agent_prompt" "$yolo"
+  lwt::agent::launch "$main_agent" "$main_agent_prompt" "$resolved_agent_mode"
 
   # --dev without agents: run dev command in the current shell
   if $run_dev && (( ${#agent_names[@]} == 0 )); then
@@ -2039,7 +2048,7 @@ lwt::cmd::doctor() {
 
   local agent_mode
   agent_mode=$(lwt::config::get_effective "agent-mode" 2>/dev/null)
-  echo "  ${_lwt_green}✓ agent-mode${_lwt_reset} ${agent_mode:-interactive}"
+  echo "  ${_lwt_green}✓ agent-mode${_lwt_reset} ${agent_mode:-auto}"
 
   local dev_cmd
   dev_cmd=$(lwt::config::get_raw "dev-cmd" 2>/dev/null)

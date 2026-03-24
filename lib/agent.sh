@@ -45,7 +45,7 @@ lwt::agent::normalize_spec() {
 lwt::agent::command_string() {
   local agent="$1"
   local prompt="$2"
-  local yolo="$3"
+  local agent_mode="$3"
   local cmd=""
 
   [[ -z "$agent" ]] && return 1
@@ -57,15 +57,23 @@ lwt::agent::command_string() {
   case "$agent" in
     claude)
       cmd="claude"
-      [[ "$yolo" == "true" ]] && cmd="$cmd --dangerously-skip-permissions"
+      case "$agent_mode" in
+        yolo)
+          cmd="$cmd --dangerously-skip-permissions"
+          ;;
+        auto)
+          cmd="$cmd --enable-auto-mode"
+          ;;
+        # interactive: plain claude, no flags
+      esac
       ;;
     codex)
       cmd="codex"
-      [[ "$yolo" == "true" ]] && cmd="$cmd --yolo"
+      [[ "$agent_mode" == "yolo" ]] && cmd="$cmd --yolo"
       ;;
     gemini)
       cmd="gemini"
-      [[ "$yolo" == "true" ]] && cmd="$cmd --yolo"
+      [[ "$agent_mode" == "yolo" ]] && cmd="$cmd --yolo"
       ;;
     *)
       return 1
@@ -81,7 +89,7 @@ lwt::agent::command_string() {
 lwt::agent::launch() {
   local agent="$1"
   local prompt="$2"
-  local yolo="$3"
+  local agent_mode="$3"
   [[ -z "$agent" ]] && return 0
 
   if ! lwt::deps::has "$agent"; then
@@ -89,32 +97,42 @@ lwt::agent::launch() {
     return 0
   fi
 
-  # Resolve yolo mode: flag > config > default (interactive)
-  if [[ "$yolo" != "true" ]]; then
-    local configured
-    configured=$(lwt::config::get_effective "agent-mode" 2>/dev/null)
-    [[ "$configured" == "yolo" ]] && yolo=true
+  # Resolve agent mode: flag > config > default (auto)
+  if [[ -z "$agent_mode" ]]; then
+    agent_mode=$(lwt::config::get_effective "agent-mode" 2>/dev/null)
+    [[ -z "$agent_mode" ]] && agent_mode="auto"
   fi
 
   lwt::ui::step "Launching $agent..."
   case "$agent" in
     claude)
-      if [[ "$yolo" == "true" ]]; then
-        if [[ -n "$prompt" ]]; then
-          claude --dangerously-skip-permissions "$prompt"
-        else
-          claude --dangerously-skip-permissions
-        fi
-      else
-        if [[ -n "$prompt" ]]; then
-          claude "$prompt"
-        else
-          claude
-        fi
-      fi
+      case "$agent_mode" in
+        yolo)
+          if [[ -n "$prompt" ]]; then
+            claude --dangerously-skip-permissions "$prompt"
+          else
+            claude --dangerously-skip-permissions
+          fi
+          ;;
+        auto)
+          if [[ -n "$prompt" ]]; then
+            claude --enable-auto-mode "$prompt"
+          else
+            claude --enable-auto-mode
+          fi
+          ;;
+        *)
+          # interactive: plain claude
+          if [[ -n "$prompt" ]]; then
+            claude "$prompt"
+          else
+            claude
+          fi
+          ;;
+      esac
       ;;
     codex)
-      if [[ "$yolo" == "true" ]]; then
+      if [[ "$agent_mode" == "yolo" ]]; then
         if [[ -n "$prompt" ]]; then
           codex --yolo "$prompt"
         else
@@ -129,7 +147,7 @@ lwt::agent::launch() {
       fi
       ;;
     gemini)
-      if [[ "$yolo" == "true" ]]; then
+      if [[ "$agent_mode" == "yolo" ]]; then
         if [[ -n "$prompt" ]]; then
           gemini --yolo "$prompt"
         else
