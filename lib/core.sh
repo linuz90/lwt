@@ -116,6 +116,7 @@ lwt::utils::copy_env_files() {
   local file rel dest_dir
 
   while IFS= read -r -d '' file; do
+    lwt::utils::is_actual_env_file "$file" || continue
     rel="${file#"$repo_root"/}"
     dest_dir="$target/$(dirname "$rel")"
     mkdir -p "$dest_dir"
@@ -126,6 +127,36 @@ lwt::utils::copy_env_files() {
     local s="s"; ((env_count == 1)) && s=""
     lwt::ui::step "Copied $env_count .env file$s"
   fi
+}
+
+lwt::utils::is_actual_env_file() {
+  local path="$1"
+  local base="${path:t}"
+  local suffix part
+  local -a parts
+
+  [[ "$base" == ".env" || "$base" == .env.* ]] || return 1
+
+  suffix="${base#.env}"
+  [[ -z "$suffix" ]] && return 0
+
+  # Keep recursive env copying focused on real runtime env files and avoid
+  # pulling repo-tracked templates like `.env.example` into new worktrees.
+  [[ "$suffix" == .* ]] || return 1
+  suffix="${suffix#.}"
+  [[ -n "$suffix" ]] || return 1
+
+  parts=("${(@s:.:)suffix}")
+  for part in "${parts[@]}"; do
+    [[ -n "$part" ]] || return 1
+    case "$part:l" in
+      example|examples|sample|samples|template|templates)
+        return 1
+        ;;
+    esac
+  done
+
+  return 0
 }
 
 lwt::utils::copy_configured_paths() {

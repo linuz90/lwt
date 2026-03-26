@@ -239,7 +239,7 @@ This is the simplest way to seed extra local-only files like browser auth state:
 lwt config add copy-on-create apps/typefully-web/.browser-auth.json
 ```
 
-That applies to both `lwt add` and `lwt checkout`, after `.env*` files are copied and before editors, terminals, or agents launch.
+That applies to both `lwt add` and `lwt checkout`, after actual `.env` files (for example `.env`, `.env.local`, `.env.production.local`) are copied and before editors, terminals, or agents launch. Template/example files like `.env.example` are skipped.
 
 Use hooks only when you need conditional or scripted behavior.
 
