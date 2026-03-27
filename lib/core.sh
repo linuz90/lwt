@@ -52,6 +52,12 @@ lwt::ui::step() {
   echo "${_lwt_dim}› $*${_lwt_reset}"
 }
 
+lwt::ui::detail() {
+  local label="$1"
+  shift
+  printf '  %s%-5s%s %s\n' "$_lwt_dim" "${label}:" "$_lwt_reset" "$*"
+}
+
 lwt::ui::confirm() {
   local prompt="$1"
   local assume_yes="${2:-false}"

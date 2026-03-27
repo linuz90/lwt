@@ -1,6 +1,83 @@
 lwt::cmd::list() {
+  local porcelain=false
+
+  while (( $# > 0 )); do
+    case "$1" in
+      -h|--help)
+        lwt::ui::help_list
+        return 0
+        ;;
+      --porcelain)
+        porcelain=true
+        ;;
+      *)
+        lwt::ui::error "Unknown option: $1"
+        return 1
+        ;;
+    esac
+    shift
+  done
+
+  if $porcelain; then
+    lwt::worktree::records
+    return 0
+  fi
+
   lwt::status::warn_gh_limitations
-  lwt::worktree::display_rows | cut -f2-
+  local wt_path rendered_row
+  while IFS=$'\t' read -r wt_path rendered_row; do
+    [[ -n "$rendered_row" ]] || continue
+    printf '%s\n' "$rendered_row"
+    printf '  %s%s%s\n' "$_lwt_dim" "$wt_path" "$_lwt_reset"
+  done < <(lwt::worktree::display_rows)
+}
+
+lwt::cmd::path() {
+  local query="${1:-}"
+  local dir=""
+  local resolve_exit=0
+
+  if (( $# > 1 )); then
+    lwt::ui::error "Unexpected arguments: ${*:2}"
+    lwt::ui::hint "Usage: lwt path [query]"
+    return 1
+  fi
+
+  if [[ "$query" == "-h" || "$query" == "--help" ]]; then
+    lwt::ui::help_path
+    return 0
+  fi
+
+  if [[ -z "$query" ]]; then
+    dir=$(git rev-parse --show-toplevel 2>/dev/null) || {
+      lwt::ui::error "Couldn't resolve the current worktree path."
+      return 1
+    }
+    printf '%s\n' "$dir"
+    return 0
+  fi
+
+  dir=$(lwt::worktree::resolve_query "$query" 2>/dev/null)
+  resolve_exit=$?
+
+  case "$resolve_exit" in
+    0)
+      printf '%s\n' "$dir"
+      ;;
+    1)
+      lwt::ui::error "No exact worktree matched: $query"
+      lwt::ui::hint "Pass an exact branch name, worktree path, or worktree directory."
+      return 1
+      ;;
+    2)
+      lwt::ui::error "Query matched multiple worktrees: $query"
+      lwt::ui::hint "Pass an exact branch name or full worktree path."
+      return 1
+      ;;
+    *)
+      return "$resolve_exit"
+      ;;
+  esac
 }
 
 lwt::cmd::config() {
@@ -243,6 +320,11 @@ lwt::cmd::switch() {
   branch=$(git branch --show-current 2>/dev/null)
   lwt::hooks::run "post-switch" "$dir" "$repo_root" "$branch" \
     "LWT_MAIN_WORKTREE_PATH" "$(lwt::worktree::main_path)" || return 1
+  # Agents often run lwt in a subprocess, so they cannot observe our `cd`.
+  # Print the absolute path explicitly so they can reliably continue there.
+  lwt::ui::success "Switched to worktree ${branch:-$dir}."
+  lwt::ui::detail "path" "$dir"
+  lwt::ui::detail "cd" "cd $(lwt::shell::quote "$dir")"
 
   if $open_editor; then
     lwt::editor::open "$dir" "$editor_override"
@@ -360,7 +442,6 @@ lwt::cmd::checkout() {
         dir="$LWT_LAST_WORKTREE_PATH"
         [[ -z "$dir" ]] && return 1
         created=true
-        lwt::ui::success "Created worktree ${ref}."
       fi
       ;;
     *)
@@ -376,6 +457,15 @@ lwt::cmd::checkout() {
   fi
   lwt::hooks::run "post-switch" "$dir" "$dir" "$ref" \
     "LWT_MAIN_WORKTREE_PATH" "$(lwt::worktree::main_path)" || return 1
+  if $created; then
+    lwt::ui::success "Created worktree ${ref}."
+  else
+    lwt::ui::success "Selected worktree ${ref}."
+  fi
+  # Agents often run lwt in a subprocess, so they cannot observe our `cd`.
+  # Print the absolute path explicitly so they can reliably continue there.
+  lwt::ui::detail "path" "$dir"
+  lwt::ui::detail "cd" "cd $(lwt::shell::quote "$dir")"
   if $open_editor; then
     lwt::editor::open "$dir" "$editor_override"
   fi
@@ -657,6 +747,10 @@ lwt::cmd::add() {
     }
 
   lwt::ui::success "Created worktree ${branch}."
+  # Agents often run lwt in a subprocess, so they cannot observe our `cd`.
+  # Print the absolute path explicitly so they can reliably continue there.
+  lwt::ui::detail "path" "$target"
+  lwt::ui::detail "cd" "cd $(lwt::shell::quote "$target")"
 
   if $open_editor; then
     lwt::editor::open "$target" "$editor_override"
@@ -1824,9 +1918,10 @@ lwt::cmd::rename() {
     return 1
   fi
 
-  local project base new_path
+  local project repo_parent base new_path
   project=$(basename "$main_wt")
-  base="$main_wt/../.worktrees/$project"
+  repo_parent="${main_wt:h}"
+  base="$repo_parent/.worktrees/$project"
   new_path="$base/$new_name"
 
   if [[ -e "$new_path" ]]; then
@@ -2112,6 +2207,11 @@ lwt::dispatch() {
       lwt::git::resolve_default_branch
       lwt::cmd::switch "$@"
       ;;
+    path)
+      lwt::git::ensure_repo || return 1
+      lwt::git::resolve_default_branch
+      lwt::cmd::path "$@"
+      ;;
     list|ls)
       lwt::git::ensure_repo || return 1
       lwt::git::resolve_default_branch
@@ -2161,6 +2261,9 @@ lwt::dispatch() {
           ;;
         switch|s)
           lwt::ui::help_switch
+          ;;
+        path)
+          lwt::ui::help_path
           ;;
         list|ls)
           lwt::ui::help_list

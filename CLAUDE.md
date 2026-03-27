@@ -54,6 +54,7 @@ Keep modules as pure function definitions and shared globals. Do not source indi
 - `lwt config show` should stay focused on core settings. Advanced/internal hook settings belong behind `--all` or `lwt hook`.
 - Hooks are an advanced feature, not part of the main mental model. Avoid surfacing them prominently in the default UX.
 - `lwt add <branch>` should stay non-interactive when the branch already exists locally or on `origin`; checking out an existing branch is the expected path, not a risky edge case.
+- Agent-facing flows should print absolute worktree paths explicitly; do not rely on in-process `cd` state or path-free summaries.
 - `lwt remove` should preserve a clear automation path: `--yes` skips the delete prompt, `--force` handles dirty/unmerged local cleanup, and remote cleanup stays explicit behind `--delete-remote`.
 - The first-contact UX for `lwt` / `lwt --help` should teach automation-safe patterns early because agents discover the tool through help output, not just humans.
 

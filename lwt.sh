@@ -15,7 +15,8 @@
 #           [--split "cmd"] [--tab "cmd"]
 #   lwt checkout [query] [-e] [--editor-cmd "cmd"]
 #   lwt switch [query] [-e] [--editor-cmd "cmd"]
-#   lwt list
+#   lwt path [query]
+#   lwt list [--porcelain]
 #   lwt merge [target-branch] [--keep-worktree] [--keep-branch] [--no-push]
 #   lwt remove [query] [-y|--yes] [-f|--force] [--delete-remote]
 #   lwt clean [-n]

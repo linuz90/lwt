@@ -5,6 +5,7 @@ lwt::ui::help_main() {
   echo "  ${_lwt_dim}Agents and scripts should prefer explicit branch/query arguments over picker flows.${_lwt_reset}"
   echo "  ${_lwt_dim}lwt add checks out existing local or origin branches without a confirmation prompt.${_lwt_reset}"
   echo "  lwt a feat-auth                              ${_lwt_dim}Create or re-use a named branch non-interactively${_lwt_reset}"
+  echo "  lwt path feat-auth                           ${_lwt_dim}Resolve the exact absolute path for a worktree${_lwt_reset}"
   echo "  lwt rm feat-auth --yes                       ${_lwt_dim}Remove a worktree without the delete prompt${_lwt_reset}"
   echo "  lwt rm feat-auth --yes --force               ${_lwt_dim}Also discard local changes and force local branch cleanup${_lwt_reset}"
   echo "  lwt help automation                          ${_lwt_dim}See the agent-safe command patterns${_lwt_reset}"
@@ -13,6 +14,7 @@ lwt::ui::help_main() {
   echo "  ${_lwt_bold}add, a${_lwt_reset}       ${_lwt_dim}Create or check out a worktree branch${_lwt_reset}"
   echo "  ${_lwt_bold}checkout, co${_lwt_reset} ${_lwt_dim}Pick an open PR and spawn a worktree${_lwt_reset}"
   echo "  ${_lwt_bold}switch, s${_lwt_reset}    ${_lwt_dim}Switch to a worktree via fzf${_lwt_reset}"
+  echo "  ${_lwt_bold}path${_lwt_reset}         ${_lwt_dim}Print an exact worktree path${_lwt_reset}"
   echo "  ${_lwt_bold}list, ls${_lwt_reset}     ${_lwt_dim}List worktrees with live status${_lwt_reset}"
   echo "  ${_lwt_bold}merge${_lwt_reset}        ${_lwt_dim}Squash-merge a worktree into the target branch${_lwt_reset}"
   echo "  ${_lwt_bold}remove, rm${_lwt_reset}   ${_lwt_dim}Remove a worktree safely${_lwt_reset}"
@@ -35,6 +37,7 @@ lwt::ui::help_main() {
   echo "  lwt a my-feature -d                        ${_lwt_dim}Run the repo dev command in place${_lwt_reset}"
   echo "  lwt co                                     ${_lwt_dim}Pick an open PR and create its worktree${_lwt_reset}"
   echo "  lwt s                                      ${_lwt_dim}Switch worktree with fzf${_lwt_reset}"
+  echo "  lwt path auth                              ${_lwt_dim}Print the exact worktree path for auth${_lwt_reset}"
   echo "  lwt ls                                     ${_lwt_dim}List all worktrees${_lwt_reset}"
   echo "  lwt merge                                  ${_lwt_dim}Squash-merge the current worktree into the default branch${_lwt_reset}"
   echo "  lwt config show                            ${_lwt_dim}See effective settings and where they come from${_lwt_reset}"
@@ -54,11 +57,14 @@ lwt::ui::help_automation() {
   echo
   lwt::ui::header "Prefer Explicit Targets"
   echo "  ${_lwt_dim}Use explicit branch/query args when calling lwt from agents or scripts.${_lwt_reset}"
+  echo "  ${_lwt_dim}lwt add, checkout, and switch print the resolved absolute worktree path so agents can continue there.${_lwt_reset}"
   echo "  ${_lwt_dim}lwt remove and lwt switch skip fzf when the query exactly matches a branch, worktree path, or worktree directory.${_lwt_reset}"
   echo "  ${_lwt_dim}Bare lwt rm, fuzzy lwt switch, and lwt checkout still open fzf pickers.${_lwt_reset}"
   echo
   lwt::ui::header "Non-Interactive Patterns"
   echo "  lwt a feat-auth                            ${_lwt_dim}Create a worktree, or check out an existing branch, without confirmation${_lwt_reset}"
+  echo "  lwt path feat-auth                         ${_lwt_dim}Print the exact absolute path for that worktree${_lwt_reset}"
+  echo "  lwt ls --porcelain                         ${_lwt_dim}Emit path<TAB>branch pairs for scripts${_lwt_reset}"
   echo "  lwt rm feat-auth --yes                     ${_lwt_dim}Remove the worktree without the delete prompt${_lwt_reset}"
   echo "  lwt rm feat-auth --yes --force             ${_lwt_dim}Also discard local changes and force local branch cleanup${_lwt_reset}"
   echo "  lwt rm feat-auth --yes --delete-remote     ${_lwt_dim}Also delete the remote branch or close the open PR${_lwt_reset}"
@@ -89,6 +95,7 @@ lwt::ui::help_add() {
   echo "  ${_lwt_dim}If branch is omitted, lwt generates a random branch name.${_lwt_reset}"
   echo "  ${_lwt_dim}New branches are created from the resolved default branch.${_lwt_reset}"
   echo "  ${_lwt_dim}Existing local or origin branches are checked out without prompting.${_lwt_reset}"
+  echo "  ${_lwt_dim}After creation, lwt prints the absolute path and a ready-to-run cd command.${_lwt_reset}"
   echo "  ${_lwt_dim}First agent runs in your shell; additional agents open in splits automatically.${_lwt_reset}"
   echo "  ${_lwt_dim}Each agent flag takes its own prompt: --claude \"fix auth\" --codex \"review tests\"${_lwt_reset}"
   echo "  ${_lwt_dim}Hyphen aliases like --claude-codex share one prompt across all agents in the alias.${_lwt_reset}"
@@ -107,6 +114,9 @@ lwt::ui::help_switch() {
   echo "  ${_lwt_bold}-e, --editor${_lwt_reset}           ${_lwt_dim}Open selected worktree in your editor${_lwt_reset}"
   echo "  ${_lwt_bold}--editor-cmd \"cmd\"${_lwt_reset}     ${_lwt_dim}Override editor command for this run${_lwt_reset}"
   echo "  ${_lwt_bold}-h, --help${_lwt_reset}             ${_lwt_dim}Show help${_lwt_reset}"
+  echo
+  lwt::ui::header "Notes"
+  echo "  ${_lwt_dim}When the target resolves, lwt prints the exact absolute worktree path.${_lwt_reset}"
 }
 
 lwt::ui::help_checkout() {
@@ -122,12 +132,25 @@ lwt::ui::help_checkout() {
   echo "  ${_lwt_dim}Use switch to move to an existing worktree.${_lwt_reset}"
   echo "  ${_lwt_dim}Use add when you want to create a worktree from an explicit branch name.${_lwt_reset}"
   echo "  ${_lwt_dim}When checkout creates a new worktree, post-create and post-switch hooks run automatically.${_lwt_reset}"
+  echo "  ${_lwt_dim}Once the target resolves, lwt prints the exact absolute worktree path.${_lwt_reset}"
 }
 
 lwt::ui::help_list() {
-  echo "${_lwt_bold}Usage:${_lwt_reset} lwt list"
+  echo "${_lwt_bold}Usage:${_lwt_reset} lwt list [--porcelain]"
   echo
-  echo "  ${_lwt_dim}Shows all worktrees with remote-aware status.${_lwt_reset}"
+  lwt::ui::header "Options"
+  echo "  ${_lwt_bold}--porcelain${_lwt_reset}            ${_lwt_dim}Print path<TAB>branch pairs for scripts${_lwt_reset}"
+  echo "  ${_lwt_bold}-h, --help${_lwt_reset}             ${_lwt_dim}Show help${_lwt_reset}"
+  echo
+  lwt::ui::header "Notes"
+  echo "  ${_lwt_dim}Shows all worktrees with remote-aware status and their absolute paths.${_lwt_reset}"
+}
+
+lwt::ui::help_path() {
+  echo "${_lwt_bold}Usage:${_lwt_reset} lwt path [query]"
+  echo
+  echo "  ${_lwt_dim}Prints the exact absolute worktree path for an exact branch, path, or worktree directory match.${_lwt_reset}"
+  echo "  ${_lwt_dim}With no query, it prints the current worktree path.${_lwt_reset}"
 }
 
 lwt::ui::help_merge() {

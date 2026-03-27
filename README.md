@@ -44,7 +44,8 @@ lwt add (a)        [branch] [-s] [-d] [-e] [-yolo]
                    [--split "cmd"] [--tab "cmd"]
 lwt checkout (co)  [query] [-e]
 lwt switch (s)     [query] [-e]
-lwt list (ls)
+lwt path           [query]
+lwt list (ls)      [--porcelain]
 lwt merge          [target-branch] [--keep-worktree] [--keep-branch] [--no-push]
 lwt remove (rm)    [query] [-y|--yes] [-f|--force] [--delete-remote]
 lwt clean          [-n]
@@ -73,6 +74,7 @@ Examples:
 | `lwt co restream`                                    | Pick an open PR matching `restream` and create its worktree         |
 | `lwt co auth -e`                                     | Pull an open PR into its own worktree and open it in your editor    |
 | `lwt s auth -e`                                      | Jump to a worktree and open it in your editor                       |
+| `lwt path auth`                                      | Print the exact absolute path for an existing worktree              |
 | `lwt merge`                                          | Squash-merge the current worktree into the configured target branch |
 | `lwt rm feat-auth --yes`                             | Remove a worktree without stopping for the delete confirmation      |
 | `lwt rm feat-auth --yes --force`                     | Also discard local changes and force local branch cleanup           |
@@ -85,6 +87,9 @@ Examples:
 If an agent or script is driving `lwt`, prefer explicit targets over picker flows:
 
 - `lwt add <branch>` is non-interactive, even when the branch already exists locally or on `origin`
+- `lwt add`, `lwt checkout`, and `lwt switch` print the resolved absolute worktree path and a ready-to-run `cd` command
+- `lwt path <branch>` prints the exact absolute path for an existing worktree
+- `lwt ls --porcelain` prints stable `path<TAB>branch` pairs for scripts
 - `lwt remove <branch> --yes` skips the delete confirmation and bypasses `fzf` when the query exactly matches a branch, worktree path, or worktree directory name
 - `lwt remove <branch> --yes --force` also discards local changes and force-deletes the local branch when needed
 - `lwt remove <branch> --yes --delete-remote` also deletes the remote branch or closes the open PR without prompting
@@ -138,7 +143,7 @@ lwt a feat-api --codex "implement OAuth callback handling"
 lwt a feat-ui --gemini "refactor profile page layout"
 ```
 
-The worktree is created, your shell `cd`s into it, and the agent starts working in an isolated checkout that cannot interfere with your main repository state.
+The worktree is created, your shell `cd`s into it, and the agent starts working in an isolated checkout that cannot interfere with your main repository state. `lwt` also prints the exact absolute worktree path before the agent starts, so subprocess-driven tools can continue in the right checkout without guessing.
 
 Single-agent flags are shorthand for `--agents` with one item, so `--claude`, `--codex`, and `--gemini` still work exactly as before. The prompt is optional. Passing one of those flags by itself launches that agent interactively in the new worktree.
 

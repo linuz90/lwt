@@ -101,15 +101,16 @@ lwt::worktree::create_branch() {
   local branch="$1"
   local confirm_existing="${2:-true}"
   local allow_new="${3:-true}"
-  local repo_root project base target
+  local repo_root repo_parent project base target
   local start_ref git_err
 
   LWT_LAST_WORKTREE_PATH=""
   [[ -z "$branch" ]] && return 1
 
   repo_root=$(lwt::worktree::main_path) || return 1
+  repo_parent="${repo_root:h}"
   project=$(basename "$repo_root")
-  base="$repo_root/../.worktrees/$project"
+  base="$repo_parent/.worktrees/$project"
   target="$base/$branch"
 
   if [[ -e "$target" ]]; then
