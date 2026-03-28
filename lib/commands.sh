@@ -477,7 +477,10 @@ lwt::cmd::add() {
   local run_setup=false
   local run_dev=false
   local yolo=false
+  local use_current_start_ref=false
   local editor_override=""
+  local start_ref_override=""
+  local start_ref_label=""
   local main_agent=""
   local main_agent_prompt=""
   local terminal_driver=""
@@ -507,6 +510,41 @@ lwt::cmd::add() {
         ;;
       -e|--editor)
         open_editor=true
+        ;;
+      --from)
+        if [[ -n "$start_ref_override" || "$use_current_start_ref" == "true" ]]; then
+          lwt::ui::error "Choose only one start point."
+          lwt::ui::hint "Use either --from <ref> or --from-current."
+          return 1
+        fi
+        if [[ -z "$2" ]]; then
+          lwt::ui::error "--from expects a ref."
+          return 1
+        fi
+        start_ref_override="$2"
+        start_ref_label="$2"
+        shift
+        ;;
+      --from=*)
+        if [[ -n "$start_ref_override" || "$use_current_start_ref" == "true" ]]; then
+          lwt::ui::error "Choose only one start point."
+          lwt::ui::hint "Use either --from <ref> or --from-current."
+          return 1
+        fi
+        start_ref_override="${1#--from=}"
+        start_ref_label="$start_ref_override"
+        if [[ -z "$start_ref_override" ]]; then
+          lwt::ui::error "--from expects a ref."
+          return 1
+        fi
+        ;;
+      --from-current)
+        if [[ -n "$start_ref_override" || "$use_current_start_ref" == "true" ]]; then
+          lwt::ui::error "Choose only one start point."
+          lwt::ui::hint "Use either --from <ref> or --from-current."
+          return 1
+        fi
+        use_current_start_ref=true
         ;;
       --editor-cmd)
         if [[ -z "$2" ]]; then
@@ -693,6 +731,19 @@ lwt::cmd::add() {
     branch=$(lwt::utils::random_branch_name)
   fi
 
+  if [[ "$use_current_start_ref" == "true" ]]; then
+    start_ref_override="HEAD"
+    start_ref_label=$(git branch --show-current 2>/dev/null)
+    [[ -z "$start_ref_label" ]] && start_ref_label="HEAD"
+
+    # This flag exists to branch from the checked-out commit in the current worktree.
+    # A warning here prevents a common mistaken assumption that uncommitted edits copy too.
+    if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
+      lwt::ui::warn "--from-current uses the current commit only; uncommitted changes stay in this worktree."
+      lwt::ui::hint "Commit or stash/apply your edits first if the new branch should include them."
+    fi
+  fi
+
   # Deduplicate agents, keeping first occurrence with its prompt
   local -a _deduped_names=()
   local -a _deduped_prompts=()
@@ -725,7 +776,7 @@ lwt::cmd::add() {
     session_payloads+=("__lwt_dev__")
   fi
 
-  lwt::worktree::create_branch "$branch" false true || return 1
+  lwt::worktree::create_branch "$branch" false true "$start_ref_override" "$start_ref_label" || return 1
   local target="$LWT_LAST_WORKTREE_PATH"
   [[ -z "$target" ]] && return 1
 

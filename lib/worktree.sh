@@ -101,6 +101,8 @@ lwt::worktree::create_branch() {
   local branch="$1"
   local confirm_existing="${2:-true}"
   local allow_new="${3:-true}"
+  local start_ref_override="${4:-}"
+  local start_ref_label="${5:-}"
   local repo_root repo_parent project base target
   local start_ref git_err
 
@@ -121,10 +123,28 @@ lwt::worktree::create_branch() {
   mkdir -p "$base"
   lwt::git::fetch_if_stale
 
-  start_ref="$LWT_DEFAULT_BASE_REF"
-  git rev-parse --verify "$start_ref" >/dev/null 2>&1 || start_ref="HEAD"
+  start_ref="$start_ref_override"
+  [[ -z "$start_ref" ]] && start_ref="$LWT_DEFAULT_BASE_REF"
+  [[ -z "$start_ref_label" ]] && start_ref_label="$start_ref"
+  if ! git rev-parse --verify "${start_ref}^{commit}" >/dev/null 2>&1; then
+    if [[ -n "$start_ref_override" ]]; then
+      lwt::ui::error "Unknown start ref: $start_ref_override"
+      lwt::ui::hint "Pass any branch, tag, or commit-ish that resolves locally."
+      return 1
+    fi
+    start_ref="HEAD"
+    start_ref_label="$start_ref"
+  fi
 
   if git show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null; then
+    # Explicit start-point flags only make sense when creating a new branch. Silently
+    # ignoring them for existing branches would make automation look correct while doing
+    # the wrong thing.
+    if [[ -n "$start_ref_override" ]]; then
+      lwt::ui::error "Branch already exists locally: $branch"
+      lwt::ui::hint "Pick a new branch name, or run lwt add $branch without an explicit start-point flag."
+      return 1
+    fi
     if [[ "$confirm_existing" == "true" ]]; then
       if ! read -rq "?Branch $branch exists locally. Check out into a worktree? [y/N] "; then
         echo
@@ -140,6 +160,11 @@ lwt::worktree::create_branch() {
     }
     lwt::ui::step "Checked out existing branch ${_lwt_bold}$branch${_lwt_reset}"
   elif git show-ref --verify --quiet "refs/remotes/origin/$branch" 2>/dev/null; then
+    if [[ -n "$start_ref_override" ]]; then
+      lwt::ui::error "Branch already exists on origin: $branch"
+      lwt::ui::hint "Pick a new branch name, or run lwt add $branch without an explicit start-point flag."
+      return 1
+    fi
     if [[ "$confirm_existing" == "true" ]]; then
       if ! read -rq "?Branch $branch exists on origin. Check out into a worktree? [y/N] "; then
         echo
@@ -165,7 +190,7 @@ lwt::worktree::create_branch() {
       lwt::ui::hint "$git_err"
       return 1
     }
-    lwt::ui::step "Created branch ${_lwt_bold}$branch${_lwt_reset}${_lwt_dim} from ${LWT_DEFAULT_BASE_REF}"
+    lwt::ui::step "Created branch ${_lwt_bold}$branch${_lwt_reset}${_lwt_dim} from ${start_ref_label}"
   fi
 
   lwt::utils::copy_env_files "$repo_root" "$target"

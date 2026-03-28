@@ -39,6 +39,7 @@ Implementation note: `lwt.sh` remains the only entrypoint you source. It loads t
 
 ```bash
 lwt add (a)        [branch] [-s] [-d] [-e] [-yolo]
+                   [--from <ref> | --from-current]
                    [--claude ["prompt"]] [--codex ["prompt"]] [--gemini ["prompt"]]
                    [--agents list ["prompt"]] [--<agent-combo> ["prompt"]]
                    [--split "cmd"] [--tab "cmd"]
@@ -71,6 +72,8 @@ Examples:
 | `lwt a feat-auth --claude "implement refresh token rotation" --codex "investigate edge cases"` | Different prompts per agent; first runs here, second in split |
 | `lwt a`                                              | Create a worktree with a random branch name                         |
 | `lwt a existing-remote-branch`                       | Bring an existing local or remote branch under `lwt` management without a confirmation prompt |
+| `lwt a feat-auth-alt --from feat-auth`               | Create a new worktree branch from `feat-auth` instead of the default branch |
+| `lwt a feat-auth-alt --from-current`                 | Create a new worktree branch from the current worktree's committed `HEAD` |
 | `lwt co restream`                                    | Pick an open PR matching `restream` and create its worktree         |
 | `lwt co auth -e`                                     | Pull an open PR into its own worktree and open it in your editor    |
 | `lwt s auth -e`                                      | Jump to a worktree and open it in your editor                       |
@@ -82,11 +85,22 @@ Examples:
 | `lwt rn new-api-name`                                | Rename the current worktree and branch together                     |
 | `lwt config set dev-cmd "pnpm --filter web dev"`     | Persist the repo's preferred dev command                            |
 
+Branch creation rules:
+
+- `lwt a <branch>` creates a new branch from the repo default branch when `<branch>` does not exist yet
+- `lwt a <branch>` checks out that branch into a worktree when `<branch>` already exists locally or on `origin`
+- `lwt a <branch> --from <ref>` creates a new branch from that explicit ref
+- `lwt a <branch> --from-current` creates a new branch from the current worktree's committed `HEAD`
+- `--from-current` does not carry over uncommitted changes; commit or stash/apply them first if needed
+
 ## Agents And Automation
 
 If an agent or script is driving `lwt`, prefer explicit targets over picker flows:
 
 - `lwt add <branch>` is non-interactive, even when the branch already exists locally or on `origin`
+- `lwt add <branch>` creates from the repo default branch unless that branch already exists, in which case it checks the existing branch out into a worktree
+- `lwt add <branch> --from <ref>` is the explicit way to branch from something other than the repo default branch
+- `lwt add <branch> --from-current` branches from the current worktree's committed `HEAD`; uncommitted changes stay where they are
 - `lwt add`, `lwt checkout`, and `lwt switch` print the resolved absolute worktree path and a ready-to-run `cd` command
 - `lwt path <branch>` prints the exact absolute path for an existing worktree
 - `lwt ls --porcelain` prints stable `path<TAB>branch` pairs for scripts
@@ -97,6 +111,8 @@ If an agent or script is driving `lwt`, prefer explicit targets over picker flow
 Avoid bare `lwt rm`, `lwt switch`, and `lwt checkout` in automation unless you are intentionally running them in a real TTY, because those flows rely on `fzf`.
 
 `-yolo` and `lwt config set agent-mode yolo` only affect Claude/Codex/Gemini permissions. They do not bypass `lwt` command confirmations.
+
+When `--from` or `--from-current` is used, `lwt` only applies that start point while creating a new branch. If the target branch already exists locally or on `origin`, `lwt` errors instead of silently ignoring the requested base.
 
 ## Remote-Aware Status
 
