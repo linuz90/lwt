@@ -22,8 +22,8 @@ Create a worktree in one command. Remove it with a safety summary that shows mer
 Requires `zsh`, `git`, and `fzf`. You'll also want [`gh`](https://cli.github.com/) for full functionality (see [Requirements](#requirements)).
 
 ```bash
-git clone https://github.com/linuz90/lwt.git ~/Code/lwt
-echo 'source ~/Code/lwt/lwt.sh' >> ~/.zshrc
+git clone https://github.com/linuz90/lwt.git ~/.lwt
+echo 'source ~/.lwt/lwt.sh' >> ~/.zshrc
 source ~/.zshrc
 ```
 
