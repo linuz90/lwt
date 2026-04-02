@@ -48,10 +48,11 @@ lwt switch (s)     [query] [-e]
 lwt path           [query]
 lwt list (ls)      [--porcelain]
 lwt merge          [target-branch] [--keep-worktree] [--keep-branch] [--no-push]
+lwt restack (rs)   [--onto <ref>] [-y|--yes]
 lwt remove (rm)    [query] [-y|--yes] [-f|--force] [--delete-remote]
 lwt clean          [-n]
 lwt rename (rn)    <new-name>
-lwt config (cfg)   [show|get|set|unset] [--global|--local]
+lwt config (cfg)   [show|get|set|add|unset] [--global|--local]
 lwt doctor
 lwt help           [command|automation]
 ```
@@ -78,7 +79,10 @@ Examples:
 | `lwt co auth -e`                                     | Pull an open PR into its own worktree and open it in your editor    |
 | `lwt s auth -e`                                      | Jump to a worktree and open it in your editor                       |
 | `lwt path auth`                                      | Print the exact absolute path for an existing worktree              |
+| `lwt ls`                                             | List worktrees and show remembered parents as `← parent: <branch>` when available |
 | `lwt merge`                                          | Squash-merge the current worktree into the configured target branch |
+| `lwt rs`                                             | Rebase the current child worktree onto its remembered parent        |
+| `lwt rs --onto feat-auth --yes`                      | Rebase the current child worktree onto an explicit branch non-interactively |
 | `lwt rm feat-auth --yes`                             | Remove a worktree without stopping for the delete confirmation      |
 | `lwt rm feat-auth --yes --force`                     | Also discard local changes and force local branch cleanup           |
 | `lwt clean -n`                                       | Preview merged worktrees before deleting anything                   |
@@ -91,6 +95,7 @@ Branch creation rules:
 - `lwt a <branch>` checks out that branch into a worktree when `<branch>` already exists locally or on `origin`
 - `lwt a <branch> --from <ref>` creates a new branch from that explicit ref
 - `lwt a <branch> --from-current` creates a new branch from the current worktree's committed `HEAD`
+- when `--from` points at a local branch or `origin/<branch>`, `lwt` remembers that parent for later `lwt restack`
 - `--from-current` does not carry over uncommitted changes; commit or stash/apply them first if needed
 
 ## Agents And Automation
@@ -101,9 +106,18 @@ If an agent or script is driving `lwt`, prefer explicit targets over picker flow
 - `lwt add <branch>` creates from the repo default branch unless that branch already exists, in which case it checks the existing branch out into a worktree
 - `lwt add <branch> --from <ref>` is the explicit way to branch from something other than the repo default branch
 - `lwt add <branch> --from-current` branches from the current worktree's committed `HEAD`; uncommitted changes stay where they are
+- `lwt restack --yes` skips only the confirmation prompt; it still refuses dirty worktrees, detached `HEAD`, and unresolved targets
 - `lwt add`, `lwt checkout`, and `lwt switch` print the resolved absolute worktree path and a ready-to-run `cd` command
 - `lwt path <branch>` prints the exact absolute path for an existing worktree
 - `lwt ls --porcelain` prints stable `path<TAB>branch` pairs for scripts
+- `lwt ls` and the interactive `lwt switch` picker show remembered parent info as `← parent: <branch>` when available
+- `lwt ls --porcelain` stays stable for scripts and omits stack annotations
+
+Example stacked label in human-readable output:
+
+```text
+feat-child ← parent: feat-parent
+```
 - `lwt remove <branch> --yes` skips the delete confirmation and bypasses `fzf` when the query exactly matches a branch, worktree path, or worktree directory name
 - `lwt remove <branch> --yes --force` also discards local changes and force-deletes the local branch when needed
 - `lwt remove <branch> --yes --delete-remote` also deletes the remote branch or closes the open PR without prompting
@@ -113,6 +127,8 @@ Avoid bare `lwt rm`, `lwt switch`, and `lwt checkout` in automation unless you a
 `-yolo` and `lwt config set agent-mode yolo` only affect Claude/Codex/Gemini permissions. They do not bypass `lwt` command confirmations.
 
 When `--from` or `--from-current` is used, `lwt` only applies that start point while creating a new branch. If the target branch already exists locally or on `origin`, `lwt` errors instead of silently ignoring the requested base.
+
+`lwt restack` only operates on the current linked worktree. It does not pick another worktree for you, restack descendants, inspect PR stacks, auto-stash changes, or auto-push anything.
 
 ## Remote-Aware Status
 
@@ -147,6 +163,42 @@ lwt merge
 lwt merge release
 lwt merge --keep-worktree
 lwt merge --admin
+```
+
+## Restack
+
+`lwt restack` is a narrow stacked-branch convenience, not a stack manager. It exists for the common case where you created a child branch with `lwt add child --from parent` and later need to rebase that child onto the updated parent.
+
+Automatic target selection is intentionally strict:
+
+- if `lwt` created the current branch with `--from <branch>` or `--from origin/<branch>`, it remembers that parent
+- otherwise you must pass `--onto <ref>` explicitly
+- the command only acts on the current linked worktree and never guesses another target from history, PR state, or commit ancestry
+
+Safety checks run before any history rewrite:
+
+- must be inside a linked worktree, not the main repo worktree
+- current branch must not be detached
+- the worktree must be clean, including untracked files
+- no rebase, merge, cherry-pick, or revert can already be in progress
+- target must resolve and must not be the current branch
+
+Before confirming, `lwt restack` also shows how many commits the current branch is behind and ahead of the chosen target so the rewrite is explicit in plain Git terms. If the branch is already up to date with the target, `lwt` exits cleanly without prompting or rebasing.
+
+Typical usage:
+
+```bash
+lwt restack
+lwt rs
+lwt restack --onto invite-onboarding-step
+lwt rs --yes
+```
+
+If the rebase hits conflicts, `lwt` stops immediately and leaves you in the normal Git flow for that worktree:
+
+```bash
+git rebase --continue
+git rebase --abort
 ```
 
 ## AI Agent Launch

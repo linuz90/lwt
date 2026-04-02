@@ -97,6 +97,44 @@ lwt::worktree::resolve_query() {
   return 1
 }
 
+lwt::worktree::remember_parent_ref() {
+  local worktree_path="$1"
+  local start_ref="$2"
+  local remembered_parent=""
+
+  [[ -n "$worktree_path" && -n "$start_ref" ]] || return 1
+
+  # Automatic restack must only rely on ancestry that lwt observed as an exact
+  # branch ref at creation time. Tags, SHAs, and HEAD stay manual via --onto.
+  remembered_parent=$(lwt::git::normalize_branch_ref "$start_ref" 2>/dev/null) || return 1
+  lwt::git::set_restack_parent "$worktree_path" "$remembered_parent"
+}
+
+lwt::worktree::remembered_parent_ref() {
+  local worktree_path="$1"
+
+  [[ -n "$worktree_path" ]] || return 1
+  lwt::git::get_restack_parent "$worktree_path"
+}
+
+lwt::worktree::stack_label() {
+  local worktree_path="$1"
+  local remembered_parent=""
+  local normalized_parent=""
+
+  [[ -n "$worktree_path" ]] || return 1
+
+  remembered_parent=$(lwt::worktree::remembered_parent_ref "$worktree_path" 2>/dev/null || true)
+  [[ -n "$remembered_parent" ]] || return 0
+
+  normalized_parent=$(lwt::git::normalize_branch_ref "$remembered_parent" 2>/dev/null || true)
+  if [[ -n "$normalized_parent" ]]; then
+    printf ' %s← parent: %s%s' "$_lwt_dim" "$normalized_parent" "$_lwt_reset"
+  else
+    printf ' %s← parent: %s (stale)%s' "$_lwt_dim" "$remembered_parent" "$_lwt_reset"
+  fi
+}
+
 lwt::worktree::create_branch() {
   local branch="$1"
   local confirm_existing="${2:-true}"
@@ -107,6 +145,7 @@ lwt::worktree::create_branch() {
   local start_ref git_err
 
   LWT_LAST_WORKTREE_PATH=""
+  LWT_LAST_WORKTREE_CREATED_NEW_BRANCH="false"
   [[ -z "$branch" ]] && return 1
 
   repo_root=$(lwt::worktree::main_path) || return 1
@@ -190,6 +229,7 @@ lwt::worktree::create_branch() {
       lwt::ui::hint "$git_err"
       return 1
     }
+    LWT_LAST_WORKTREE_CREATED_NEW_BRANCH="true"
     lwt::ui::step "Created branch ${_lwt_bold}$branch${_lwt_reset}${_lwt_dim} from ${start_ref_label}"
   fi
 
@@ -203,6 +243,7 @@ lwt::worktree::create_branch() {
 lwt::worktree::display_rows() {
   setopt local_options no_bg_nice
 
+  local include_stack="${1:-true}"
   local current_dir main_dir tmpdir
   local -a records
   local record wt_path branch
@@ -236,12 +277,16 @@ lwt::worktree::display_rows() {
       local marker="  "
       local label="$branch"
       local flags
+      local stack_label=""
 
       [[ "$wt_path" == "$current_dir" ]] && marker="* "
       [[ "$wt_path" == "$main_dir" ]] && label="$branch (repo)"
       flags=$(lwt::status::for_worktree "$wt_path" "$branch")
+      if [[ "$include_stack" == "true" ]]; then
+        stack_label=$(lwt::worktree::stack_label "$wt_path")
+      fi
 
-      printf '%s\t%s%s%s\n' "$wt_path" "$marker" "$label" "$flags" > "$tmpdir/$idx"
+      printf '%s\t%s%s%s%s\n' "$wt_path" "$marker" "$label" "$stack_label" "$flags" > "$tmpdir/$idx"
     ) &
 
     ((idx++))

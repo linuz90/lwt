@@ -12,7 +12,7 @@ source lwt.sh && lwt <command> [args]
 
 This catches runtime errors (bad math expressions, missing variables, syntax issues) that aren't visible from reading the code alone.
 
-For interactive commands such as `merge`, `remove`, `rename`, and `clean`, test with a TTY/PTY so confirmation prompts behave like a real shell session.
+For interactive commands such as `merge`, `remove`, `rename`, `restack`, and `clean`, test with a TTY/PTY so confirmation prompts behave like a real shell session.
 
 ## zsh Footguns
 
@@ -55,6 +55,8 @@ Keep modules as pure function definitions and shared globals. Do not source indi
 - Hooks are an advanced feature, not part of the main mental model. Avoid surfacing them prominently in the default UX.
 - `lwt add <branch>` should stay non-interactive when the branch already exists locally or on `origin`; checking out an existing branch is the expected path, not a risky edge case.
 - `lwt add` should default to the repo default branch, with explicit ancestry behind opt-in flags such as `--from <ref>` or `--from-current`.
+- Once a branch has remembered parent metadata, `lwt list` and the `lwt switch` picker should surface it by default as `← parent: <branch>`; use that explicit label shape rather than a bare arrow/value pair.
+- `lwt restack` should stay scoped to the current linked worktree. Automatic parent selection only applies to branches created with `lwt add --from <branch>`.
 - Agent-facing flows should print absolute worktree paths explicitly; do not rely on in-process `cd` state or path-free summaries.
 - `lwt remove` should preserve a clear automation path: `--yes` skips the delete prompt, `--force` handles dirty/unmerged local cleanup, and remote cleanup stays explicit behind `--delete-remote`.
 - The first-contact UX for `lwt` / `lwt --help` should teach automation-safe patterns early because agents discover the tool through help output, not just humans.

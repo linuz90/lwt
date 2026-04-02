@@ -18,6 +18,7 @@
 #   lwt path [query]
 #   lwt list [--porcelain]
 #   lwt merge [target-branch] [--keep-worktree] [--keep-branch] [--no-push]
+#   lwt restack [--onto <ref>] [--yes]
 #   lwt remove [query] [-y|--yes] [-f|--force] [--delete-remote]
 #   lwt clean [-n]
 #   lwt rename <new-name>

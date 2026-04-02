@@ -22,6 +22,7 @@ typeset -g LWT_DEFAULT_BASE_REF=""
 typeset -g LWT_GH_MODE=""
 typeset -g LWT_GH_NOTICE_PRINTED=0
 typeset -g LWT_LAST_WORKTREE_PATH=""
+typeset -g LWT_LAST_WORKTREE_CREATED_NEW_BRANCH="false"
 typeset -g LWT_LAST_GH_MERGE_OUTPUT=""
 
 lwt::deps::has() {
@@ -56,6 +57,18 @@ lwt::ui::detail() {
   local label="$1"
   shift
   printf '  %s%-5s%s %s\n' "$_lwt_dim" "${label}:" "$_lwt_reset" "$*"
+}
+
+lwt::utils::count_noun() {
+  local count="$1"
+  local singular="$2"
+  local plural="${3:-${singular}s}"
+
+  if [[ "$count" == "1" ]]; then
+    printf '%s %s' "$count" "$singular"
+  else
+    printf '%s %s' "$count" "$plural"
+  fi
 }
 
 lwt::ui::confirm() {

@@ -29,7 +29,7 @@ lwt::cmd::list() {
     [[ -n "$rendered_row" ]] || continue
     printf '%s\n' "$rendered_row"
     printf '  %s%s%s\n' "$_lwt_dim" "$wt_path" "$_lwt_reset"
-  done < <(lwt::worktree::display_rows)
+  done < <(lwt::worktree::display_rows true)
 }
 
 lwt::cmd::path() {
@@ -242,6 +242,8 @@ lwt::cmd::switch() {
   local open_editor=false
   local editor_override=""
   local dir=""
+  local remembered_parent=""
+  local normalized_parent=""
 
   while (( $# > 0 )); do
     case "$1" in
@@ -308,7 +310,7 @@ lwt::cmd::switch() {
       return 1
     fi
 
-    dir=$(lwt::worktree::display_rows | fzf --ansi --height 40% --reverse --select-1 \
+    dir=$(lwt::worktree::display_rows true | fzf --ansi --height 40% --reverse --select-1 \
       --query="$query" --delimiter='\t' --with-nth=2.. | awk -F'\t' '{print $1}')
   fi
 
@@ -323,6 +325,15 @@ lwt::cmd::switch() {
   # Agents often run lwt in a subprocess, so they cannot observe our `cd`.
   # Print the absolute path explicitly so they can reliably continue there.
   lwt::ui::success "Switched to worktree ${branch:-$dir}."
+  remembered_parent=$(lwt::worktree::remembered_parent_ref "$dir" 2>/dev/null || true)
+  if [[ -n "$remembered_parent" ]]; then
+    normalized_parent=$(lwt::git::normalize_branch_ref "$remembered_parent" 2>/dev/null || true)
+    if [[ -n "$normalized_parent" ]]; then
+      lwt::ui::detail "parent" "$normalized_parent"
+    else
+      lwt::ui::detail "parent" "$remembered_parent (stale)"
+    fi
+  fi
   lwt::ui::detail "path" "$dir"
   lwt::ui::detail "cd" "cd $(lwt::shell::quote "$dir")"
 
@@ -780,6 +791,15 @@ lwt::cmd::add() {
   local target="$LWT_LAST_WORKTREE_PATH"
   [[ -z "$target" ]] && return 1
 
+  if [[ "$LWT_LAST_WORKTREE_CREATED_NEW_BRANCH" == "true" && -n "$start_ref_override" ]]; then
+    if ! lwt::worktree::remember_parent_ref "$target" "$start_ref_override"; then
+      if lwt::git::normalize_branch_ref "$start_ref_override" >/dev/null 2>&1; then
+        lwt::ui::warn "Created $branch, but couldn't remember its restack parent."
+        lwt::ui::hint "Use lwt restack --onto <ref> inside $target if needed."
+      fi
+    fi
+  fi
+
   cd "$target" || return 1
 
   if $run_setup || (( ${#agent_names[@]} > 0 )); then
@@ -910,6 +930,201 @@ lwt::cmd::add() {
       lwt::ui::hint "Set one with: lwt config set dev-cmd \"pnpm --filter app dev\""
     fi
   fi
+}
+
+lwt::restack::resolve_target() {
+  local worktree="$1"
+  local explicit_target="${2:-}"
+  local remembered_parent=""
+  local normalized_branch_ref=""
+
+  [[ -n "$worktree" ]] || return 1
+
+  if [[ -n "$explicit_target" ]]; then
+    normalized_branch_ref=$(lwt::git::normalize_branch_ref "$explicit_target" 2>/dev/null || true)
+    if [[ -n "$normalized_branch_ref" ]]; then
+      printf '%s\t%s\n' "$normalized_branch_ref" "explicit --onto"
+      return 0
+    fi
+
+    if git -C "$worktree" rev-parse --verify "${explicit_target}^{commit}" >/dev/null 2>&1; then
+      printf '%s\t%s\n' "$explicit_target" "explicit --onto"
+      return 0
+    fi
+
+    lwt::ui::error "Target ref not found: $explicit_target"
+    lwt::ui::hint "Pass a local branch, origin/<branch>, tag, or commit-ish that resolves here."
+    return 1
+  fi
+
+  remembered_parent=$(lwt::worktree::remembered_parent_ref "$worktree" 2>/dev/null || true)
+  if [[ -z "$remembered_parent" ]]; then
+    lwt::ui::error "No remembered parent for this worktree. Re-run with --onto <branch>."
+    return 1
+  fi
+
+  normalized_branch_ref=$(lwt::git::normalize_branch_ref "$remembered_parent" 2>/dev/null || true)
+  if [[ -z "$normalized_branch_ref" ]]; then
+    lwt::ui::error "Remembered parent no longer resolves: $remembered_parent"
+    lwt::ui::hint "Re-run with --onto <branch>."
+    return 1
+  fi
+
+  printf '%s\t%s\n' "$normalized_branch_ref" "remembered parent"
+}
+
+lwt::cmd::restack() {
+  local assume_yes=false
+  local explicit_target=""
+  local main_wt=""
+  local current_wt=""
+  local branch=""
+  local target_info=""
+  local target_ref=""
+  local target_source=""
+  local target_branch_name=""
+  local divergence_counts=""
+  local target_behind_count=0
+  local branch_ahead_count=0
+  local in_progress_operation=""
+  local confirm_exit=0
+
+  while (( $# > 0 )); do
+    case "$1" in
+      -h|--help)
+        lwt::ui::help_restack
+        return 0
+        ;;
+      -y|--yes)
+        assume_yes=true
+        ;;
+      --onto)
+        if [[ -z "${2:-}" ]]; then
+          lwt::ui::error "--onto expects a ref."
+          return 1
+        fi
+        explicit_target="$2"
+        shift
+        ;;
+      --onto=*)
+        explicit_target="${1#--onto=}"
+        if [[ -z "$explicit_target" ]]; then
+          lwt::ui::error "--onto expects a ref."
+          return 1
+        fi
+        ;;
+      --)
+        shift
+        if (( $# > 0 )); then
+          lwt::ui::error "Unexpected arguments: $*"
+          lwt::ui::hint "Usage: lwt restack [--onto <ref>] [--yes]"
+          return 1
+        fi
+        break
+        ;;
+      -*)
+        lwt::ui::error "Unknown option: $1"
+        return 1
+        ;;
+      *)
+        lwt::ui::error "Unexpected argument: $1"
+        lwt::ui::hint "Usage: lwt restack [--onto <ref>] [--yes]"
+        return 1
+        ;;
+    esac
+    shift
+  done
+
+  main_wt=$(lwt::worktree::main_path) || return 1
+  current_wt=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    lwt::ui::error "Couldn't resolve the current worktree path."
+    return 1
+  }
+
+  if [[ "$current_wt" == "$main_wt" ]]; then
+    lwt::ui::error "Run lwt restack from inside a linked worktree."
+    return 1
+  fi
+
+  branch=$(git -C "$current_wt" branch --show-current 2>/dev/null)
+  if [[ -z "$branch" ]]; then
+    lwt::ui::error "Cannot restack a detached HEAD worktree."
+    return 1
+  fi
+
+  in_progress_operation=$(lwt::git::operation_in_progress "$current_wt" 2>/dev/null || true)
+  if [[ -n "$in_progress_operation" ]]; then
+    lwt::ui::error "Worktree already has a $in_progress_operation in progress."
+    lwt::ui::hint "Finish it before restacking."
+    return 1
+  fi
+
+  if [[ -n "$(git -C "$current_wt" status --porcelain 2>/dev/null)" ]]; then
+    lwt::ui::error "Worktree has local changes. Commit or stash them before restacking."
+    return 1
+  fi
+
+  # Restack depends on the latest remote branch tips; a stale FETCH_HEAD can make
+  # us rebase onto the wrong parent state even when the remembered branch is right.
+  lwt::git::fetch_if_stale 0
+
+  target_info=$(lwt::restack::resolve_target "$current_wt" "$explicit_target") || return 1
+  IFS=$'\t' read -r target_ref target_source <<< "$target_info"
+
+  target_branch_name=$(lwt::git::branch_name_from_ref "$target_ref" 2>/dev/null || true)
+  if [[ -n "$target_branch_name" && "$target_branch_name" == "$branch" ]]; then
+    lwt::ui::error "Restack target matches the current branch: $branch"
+    return 1
+  fi
+
+  # Show divergence against the rebase target so the user can tell whether this
+  # is a no-op, a true stacked rebase, or an unusual "branch has no unique work"
+  # situation before rewriting history.
+  divergence_counts=$(git -C "$current_wt" rev-list --left-right --count "${target_ref}...HEAD" 2>/dev/null) || {
+    lwt::ui::error "Couldn't calculate divergence from $target_ref."
+    return 1
+  }
+  IFS=$'\t' read -r target_behind_count branch_ahead_count <<< "$divergence_counts"
+  [[ -n "$target_behind_count" ]] || target_behind_count=0
+  [[ -n "$branch_ahead_count" ]] || branch_ahead_count=0
+
+  if (( target_behind_count == 0 )); then
+    lwt::ui::success "$branch is already up to date with $target_ref."
+    if (( branch_ahead_count > 0 )); then
+      lwt::ui::detail "ahead" "$(lwt::utils::count_noun "$branch_ahead_count" "commit") still ahead of target"
+    fi
+    lwt::ui::detail "path" "$current_wt"
+    return 0
+  fi
+
+  lwt::ui::header "Restack worktree"
+  echo "  branch: ${_lwt_bold}$branch${_lwt_reset}"
+  echo "  onto:   ${_lwt_bold}$target_ref${_lwt_reset}"
+  echo "  source: ${_lwt_dim}$target_source${_lwt_reset}"
+  echo "  behind: ${_lwt_dim}$(lwt::utils::count_noun "$target_behind_count" "commit") behind target${_lwt_reset}"
+  echo "  ahead:  ${_lwt_dim}$(lwt::utils::count_noun "$branch_ahead_count" "commit") ahead of target${_lwt_reset}"
+  echo "  action: ${_lwt_dim}git rebase $target_ref${_lwt_reset}"
+  echo
+
+  lwt::ui::confirm "Restack $branch onto $target_ref? [y/N]" "$assume_yes" "Re-run with --yes to skip the confirmation prompt."
+  confirm_exit=$?
+  if (( confirm_exit != 0 )); then
+    (( confirm_exit == 1 )) && return 0
+    return "$confirm_exit"
+  fi
+
+  if ! git -C "$current_wt" rebase "$target_ref"; then
+    if [[ "$(lwt::git::operation_in_progress "$current_wt" 2>/dev/null || true)" == "rebase" ]]; then
+      lwt::ui::error "Rebase stopped with conflicts in $current_wt."
+      lwt::ui::hint "Resolve them there, then run git rebase --continue or git rebase --abort."
+    else
+      lwt::ui::error "git rebase $target_ref failed in $current_wt."
+    fi
+    return 1
+  fi
+
+  lwt::ui::success "Restacked $branch onto $target_ref."
+  lwt::ui::detail "path" "$current_wt"
 }
 
 lwt::merge::target_branch() {
@@ -1590,12 +1805,12 @@ lwt::cmd::remove() {
   if $merged; then
     echo "  Branch: ${_lwt_bold}$branch${_lwt_reset} ${_lwt_green}✓ merged${_lwt_reset}"
   else
-    echo "  Branch: ${_lwt_bold}$branch${_lwt_reset} ${_lwt_dim}($commits commit(s) ahead of $LWT_DEFAULT_BRANCH)${_lwt_reset}"
+    echo "  Branch: ${_lwt_bold}$branch${_lwt_reset} ${_lwt_dim}($(lwt::utils::count_noun "$commits" "commit") ahead of $LWT_DEFAULT_BRANCH)${_lwt_reset}"
   fi
-  ((changed > 0)) && echo "  ${_lwt_yellow}⚠ $changed uncommitted file(s)${_lwt_reset}"
+  ((changed > 0)) && echo "  ${_lwt_yellow}⚠ $(lwt::utils::count_noun "$changed" "uncommitted file" "uncommitted files")${_lwt_reset}"
   if ! $merged; then
-    ((unpushed > 0)) && echo "  ${_lwt_yellow}⚠ $unpushed unpushed commit(s)${_lwt_reset}"
-    ((behind > 0)) && echo "  ${_lwt_dim}↓ $behind commit(s) behind remote${_lwt_reset}"
+    ((unpushed > 0)) && echo "  ${_lwt_yellow}⚠ $(lwt::utils::count_noun "$unpushed" "unpushed commit" "unpushed commits")${_lwt_reset}"
+    ((behind > 0)) && echo "  ${_lwt_dim}↓ $(lwt::utils::count_noun "$behind" "commit") behind remote${_lwt_reset}"
   fi
 
   # detect PR (open → used for post-deletion cleanup; merged → informational link)
@@ -1832,7 +2047,7 @@ lwt::cmd::clean() {
   fi
 
   echo
-  if ! read -rq "?Remove all ${#merged_paths[@]} merged worktree(s)? [y/N] "; then
+  if ! read -rq "?Remove all $(lwt::utils::count_noun "${#merged_paths[@]}" "merged worktree")? [y/N] "; then
     echo
     return 0
   fi
@@ -2095,7 +2310,7 @@ lwt::cmd::rename() {
           fi
         done
       else
-        lwt::ui::hint "Old PR(s) were closed when the branch was deleted. You can reopen manually."
+        lwt::ui::hint "Old PRs were closed when the branch was deleted. You can reopen them manually."
       fi
     fi
   fi
@@ -2273,6 +2488,11 @@ lwt::dispatch() {
       lwt::git::resolve_default_branch
       lwt::cmd::merge "$@"
       ;;
+    restack|rs)
+      lwt::git::ensure_repo || return 1
+      lwt::git::resolve_default_branch
+      lwt::cmd::restack "$@"
+      ;;
     remove|rm)
       lwt::git::ensure_repo || return 1
       lwt::git::resolve_default_branch
@@ -2321,6 +2541,9 @@ lwt::dispatch() {
           ;;
         merge)
           lwt::ui::help_merge
+          ;;
+        restack|rs)
+          lwt::ui::help_restack
           ;;
         remove|rm)
           lwt::ui::help_remove
