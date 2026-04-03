@@ -38,6 +38,7 @@ lwt::status::warn_gh_limitations() {
 
 lwt::status::is_merged() {
   local branch="$1"
+  local dir="${2:-}"  # optional worktree dir for SHA verification
   [[ -z "$branch" || "$branch" == "(detached)" ]] && return 1
   [[ "$branch" == "$LWT_DEFAULT_BRANCH" || "$branch" == "main" || "$branch" == "master" ]] && return 1
 
@@ -46,9 +47,22 @@ lwt::status::is_merged() {
     return 1
   fi
 
-  local merged_count
-  merged_count=$(gh pr list --head "$branch" --state merged --json number -q 'length' 2>/dev/null)
-  [[ "$merged_count" -gt 0 ]] 2>/dev/null
+  # Get the most recent merged PR's head SHA to verify it matches this branch.
+  # Matching by name alone causes false positives when a branch is recreated
+  # after a previous same-named branch was merged and deleted.
+  local pr_head_sha
+  pr_head_sha=$(gh pr list --head "$branch" --state merged --json headRefOid -q '.[0].headRefOid' 2>/dev/null)
+  [[ -z "$pr_head_sha" ]] && return 1
+
+  # If we have a worktree dir, verify the merged PR's commit is reachable
+  # from the current branch. A recreated branch won't contain the old commits.
+  if [[ -n "$dir" ]]; then
+    if ! git -C "$dir" merge-base --is-ancestor "$pr_head_sha" HEAD 2>/dev/null; then
+      return 1
+    fi
+  fi
+
+  return 0
 }
 
 lwt::status::for_worktree() {
@@ -66,7 +80,7 @@ lwt::status::for_worktree() {
     behind=$(git -C "$dir" rev-list --count 'HEAD..@{upstream}' 2>/dev/null)
   fi
 
-  if lwt::status::is_merged "$branch"; then
+  if lwt::status::is_merged "$branch" "$dir"; then
     merged=true
     printf ' %s✓ merged%s' "$_lwt_green" "$_lwt_reset"
   fi

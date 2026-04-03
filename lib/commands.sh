@@ -1798,7 +1798,7 @@ lwt::cmd::remove() {
     behind=$(git -C "$worktree" rev-list --count 'HEAD..@{upstream}' 2>/dev/null)
   fi
 
-  lwt::status::is_merged "$branch" && merged=true
+  lwt::status::is_merged "$branch" "$worktree" && merged=true
 
   lwt::ui::header "Remove worktree"
   echo "  ${_lwt_dim}$worktree${_lwt_reset}"
@@ -2023,7 +2023,7 @@ lwt::cmd::clean() {
 
     [[ "$wt_path" == "$main_wt" ]] && continue
 
-    if lwt::status::is_merged "$branch"; then
+    if lwt::status::is_merged "$branch" "$wt_path"; then
       merged_paths+=("$wt_path")
       merged_branches+=("$branch")
     fi
