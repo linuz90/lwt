@@ -81,7 +81,7 @@ Examples:
 | `lwt path auth`                                      | Print the exact absolute path for an existing worktree              |
 | `lwt ls`                                             | List worktrees and show remembered parents as `← parent: <branch>` when available |
 | `lwt merge`                                          | Squash-merge the current worktree into the configured target branch |
-| `lwt rs`                                             | Rebase the current child worktree onto its remembered parent        |
+| `lwt rs`                                             | Rebase the current worktree onto its remembered parent, or fall back to the default branch in the summary |
 | `lwt rs --onto feat-auth --yes`                      | Rebase the current child worktree onto an explicit branch non-interactively |
 | `lwt rm feat-auth --yes`                             | Remove a worktree without stopping for the delete confirmation      |
 | `lwt rm feat-auth --yes --force`                     | Also discard local changes and force local branch cleanup           |
@@ -96,6 +96,7 @@ Branch creation rules:
 - `lwt a <branch> --from <ref>` creates a new branch from that explicit ref
 - `lwt a <branch> --from-current` creates a new branch from the current worktree's committed `HEAD`
 - when `--from` points at a local branch or `origin/<branch>`, `lwt` remembers that parent for later `lwt restack`
+- when `lwt a <branch>` creates a new branch from the repo default branch, `lwt` also remembers that default branch for later `lwt restack`
 - `--from-current` does not carry over uncommitted changes; commit or stash/apply them first if needed
 
 ## Agents And Automation
@@ -167,11 +168,13 @@ lwt merge --admin
 
 ## Restack
 
-`lwt restack` is a narrow stacked-branch convenience, not a stack manager. It exists for the common case where you created a child branch with `lwt add child --from parent` and later need to rebase that child onto the updated parent.
+`lwt restack` is a narrow stacked-branch convenience, not a stack manager. It exists for the common case where you created a child branch with `lwt add child --from parent` and later need to rebase that child onto the updated parent. It also covers the common "my branch started from `main` and now `main` moved on" cleanup flow.
 
 Automatic target selection is intentionally strict:
 
 - if `lwt` created the current branch with `--from <branch>` or `--from origin/<branch>`, it remembers that parent
+- if `lwt` created the current branch from the repo default branch, it remembers that default branch too
+- older worktrees with no remembered parent can still fall back to the repo default branch in the restack summary
 - otherwise you must pass `--onto <ref>` explicitly
 - the command only acts on the current linked worktree and never guesses another target from history, PR state, or commit ancestry
 
@@ -184,6 +187,8 @@ Safety checks run before any history rewrite:
 - target must resolve and must not be the current branch
 
 Before confirming, `lwt restack` also shows how many commits the current branch is behind and ahead of the chosen target so the rewrite is explicit in plain Git terms. If the branch is already up to date with the target, `lwt` exits cleanly without prompting or rebasing.
+
+For older worktrees that predate remembered default-branch metadata, `lwt restack` warns first and uses the repo default branch in the restack summary unless you pass `--onto`. That keeps the stale-branch-on-`main` case convenient without making `--yes` or automation silently guess.
 
 Typical usage:
 

@@ -18,7 +18,7 @@ lwt::ui::help_main() {
   echo "  ${_lwt_bold}path${_lwt_reset}         ${_lwt_dim}Print an exact worktree path${_lwt_reset}"
   echo "  ${_lwt_bold}list, ls${_lwt_reset}     ${_lwt_dim}List worktrees with status and remembered parents${_lwt_reset}"
   echo "  ${_lwt_bold}merge${_lwt_reset}        ${_lwt_dim}Squash-merge a worktree into the target branch${_lwt_reset}"
-  echo "  ${_lwt_bold}restack, rs${_lwt_reset}  ${_lwt_dim}Rebase the current child worktree onto its parent${_lwt_reset}"
+  echo "  ${_lwt_bold}restack, rs${_lwt_reset}  ${_lwt_dim}Rebase the current worktree onto its parent or default branch${_lwt_reset}"
   echo "  ${_lwt_bold}remove, rm${_lwt_reset}   ${_lwt_dim}Remove a worktree safely${_lwt_reset}"
   echo "  ${_lwt_bold}clean${_lwt_reset}        ${_lwt_dim}Remove all merged worktrees at once${_lwt_reset}"
   echo "  ${_lwt_bold}rename, rn${_lwt_reset}   ${_lwt_dim}Rename a worktree and its branch${_lwt_reset}"
@@ -80,7 +80,8 @@ lwt::ui::help_automation() {
   echo
   lwt::ui::header "Agent Notes"
   echo "  ${_lwt_dim}-yolo and agent-mode yolo control Claude/Codex/Gemini permissions, not lwt confirmations.${_lwt_reset}"
-  echo "  ${_lwt_dim}Automatic restack only works when lwt created the branch with --from <branch>. Everything else must pass --onto explicitly.${_lwt_reset}"
+  echo "  ${_lwt_dim}Automatic restack works for branches lwt created from --from <branch> and from the repo default branch.${_lwt_reset}"
+  echo "  ${_lwt_dim}Older worktrees without remembered metadata can still fall back to the default branch in the summary; automation should still pass --onto when needed.${_lwt_reset}"
   echo "  ${_lwt_dim}If you need picker-based flows, run lwt in a real TTY.${_lwt_reset}"
 }
 
@@ -114,6 +115,7 @@ lwt::ui::help_add() {
   echo "  ${_lwt_dim}By default, new branches are created from the resolved default branch.${_lwt_reset}"
   echo "  ${_lwt_dim}Use --from <ref> or --from-current to branch from something else explicitly.${_lwt_reset}"
   echo "  ${_lwt_dim}When --from points at a local branch or origin/<branch>, lwt remembers that parent for later lwt restack.${_lwt_reset}"
+  echo "  ${_lwt_dim}Default-branch creations also remember that default branch for later lwt restack.${_lwt_reset}"
   echo "  ${_lwt_dim}--from-current uses the current commit only; uncommitted changes stay in the current worktree.${_lwt_reset}"
   echo "  ${_lwt_dim}If the branch already exists locally or on origin, lwt checks it out into a worktree instead of creating a new branch.${_lwt_reset}"
   echo "  ${_lwt_dim}If the target branch already exists, explicit start-point flags are rejected instead of being ignored.${_lwt_reset}"
@@ -202,8 +204,8 @@ lwt::ui::help_merge() {
 lwt::ui::help_restack() {
   echo "${_lwt_bold}Usage:${_lwt_reset} lwt restack [--onto <ref>] [--yes]"
   echo
-  echo "  ${_lwt_dim}Rebases the current linked worktree onto an explicit target or a remembered parent.${_lwt_reset}"
-  echo "  ${_lwt_dim}Automatic parent selection only works when lwt created this branch with --from <branch>.${_lwt_reset}"
+  echo "  ${_lwt_dim}Rebases the current linked worktree onto an explicit target, a remembered parent, or the repo default branch.${_lwt_reset}"
+  echo "  ${_lwt_dim}Automatic target selection works for branches lwt created from --from <branch> and from the repo default branch.${_lwt_reset}"
   echo
   lwt::ui::header "Options"
   echo "  ${_lwt_bold}--onto <ref>${_lwt_reset}      ${_lwt_dim}Restack onto an explicit branch, tag, or commit-ish${_lwt_reset}"
@@ -218,7 +220,8 @@ lwt::ui::help_restack() {
   echo
   lwt::ui::header "Notes"
   echo "  ${_lwt_dim}Runs only in the current linked worktree; the main repo worktree is never auto-selected.${_lwt_reset}"
-  echo "  ${_lwt_dim}Fails closed on dirty worktrees, detached HEAD, in-progress Git operations, missing parents, and same-branch targets.${_lwt_reset}"
+  echo "  ${_lwt_dim}Fails closed on dirty worktrees, detached HEAD, in-progress Git operations, unresolved targets, and same-branch targets.${_lwt_reset}"
+  echo "  ${_lwt_dim}Older worktrees without remembered metadata can still fall back to the repo default branch in the summary.${_lwt_reset}"
   echo "  ${_lwt_dim}The confirmation summary shows behind/ahead counts relative to the chosen target before rebasing.${_lwt_reset}"
   echo "  ${_lwt_dim}If the branch is already up to date with the target, lwt exits without prompting or rebasing.${_lwt_reset}"
   echo "  ${_lwt_dim}On conflicts, lwt leaves you in the normal git rebase flow for that worktree.${_lwt_reset}"

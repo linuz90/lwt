@@ -96,6 +96,23 @@ lwt::git::normalize_branch_ref() {
   return 1
 }
 
+lwt::git::default_branch_ref() {
+  local normalized_ref=""
+
+  if [[ -n "$LWT_DEFAULT_BASE_REF" ]]; then
+    normalized_ref=$(lwt::git::normalize_branch_ref "$LWT_DEFAULT_BASE_REF" 2>/dev/null || true)
+    [[ -n "$normalized_ref" ]] && {
+      printf '%s\n' "$normalized_ref"
+      return 0
+    }
+  fi
+
+  [[ -n "$LWT_DEFAULT_BRANCH" ]] || return 1
+  normalized_ref=$(lwt::git::normalize_branch_ref "$LWT_DEFAULT_BRANCH" 2>/dev/null || true)
+  [[ -n "$normalized_ref" ]] || return 1
+  printf '%s\n' "$normalized_ref"
+}
+
 lwt::git::branch_name_from_ref() {
   local ref="${1:-}"
 

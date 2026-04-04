@@ -791,9 +791,16 @@ lwt::cmd::add() {
   local target="$LWT_LAST_WORKTREE_PATH"
   [[ -z "$target" ]] && return 1
 
-  if [[ "$LWT_LAST_WORKTREE_CREATED_NEW_BRANCH" == "true" && -n "$start_ref_override" ]]; then
-    if ! lwt::worktree::remember_parent_ref "$target" "$start_ref_override"; then
-      if lwt::git::normalize_branch_ref "$start_ref_override" >/dev/null 2>&1; then
+  if [[ "$LWT_LAST_WORKTREE_CREATED_NEW_BRANCH" == "true" ]]; then
+    local restack_parent_ref=""
+    if [[ -n "$start_ref_override" ]]; then
+      restack_parent_ref="$start_ref_override"
+    else
+      restack_parent_ref="$LWT_DEFAULT_BASE_REF"
+    fi
+
+    if [[ -n "$restack_parent_ref" ]] && ! lwt::worktree::remember_parent_ref "$target" "$restack_parent_ref"; then
+      if lwt::git::normalize_branch_ref "$restack_parent_ref" >/dev/null 2>&1; then
         lwt::ui::warn "Created $branch, but couldn't remember its restack parent."
         lwt::ui::hint "Use lwt restack --onto <ref> inside $target if needed."
       fi
@@ -934,11 +941,15 @@ lwt::cmd::add() {
 
 lwt::restack::resolve_target() {
   local worktree="$1"
-  local explicit_target="${2:-}"
+  local branch="$2"
+  local explicit_target="${3:-}"
+  local assume_yes="${4:-false}"
   local remembered_parent=""
   local normalized_branch_ref=""
+  local default_branch_ref=""
+  local default_branch_name=""
 
-  [[ -n "$worktree" ]] || return 1
+  [[ -n "$worktree" && -n "$branch" ]] || return 1
 
   if [[ -n "$explicit_target" ]]; then
     normalized_branch_ref=$(lwt::git::normalize_branch_ref "$explicit_target" 2>/dev/null || true)
@@ -959,6 +970,31 @@ lwt::restack::resolve_target() {
 
   remembered_parent=$(lwt::worktree::remembered_parent_ref "$worktree" 2>/dev/null || true)
   if [[ -z "$remembered_parent" ]]; then
+    default_branch_ref=$(lwt::git::default_branch_ref 2>/dev/null || true)
+    default_branch_name=$(lwt::git::branch_name_from_ref "$default_branch_ref" 2>/dev/null || true)
+
+    # Older lwt worktrees did not remember the default branch even when the
+    # branch was created from it, so surface that fallback explicitly in the
+    # restack summary instead of silently guessing under --yes.
+    if [[ -n "$default_branch_ref" && -n "$default_branch_name" && "$default_branch_name" != "$branch" ]]; then
+      if [[ "$assume_yes" == "true" ]]; then
+        lwt::ui::error "No remembered parent for this worktree."
+        lwt::ui::hint "Re-run with --onto <branch>, or without --yes to fall back to $default_branch_ref in the summary."
+        return 1
+      fi
+
+      if [[ ! -t 0 ]]; then
+        lwt::ui::error "No remembered parent for this worktree."
+        lwt::ui::hint "Re-run with --onto <branch>, or from a TTY to fall back to $default_branch_ref."
+        return 1
+      fi
+
+      lwt::ui::warn "No remembered parent for this worktree."
+      lwt::ui::hint "If this branch started from the repo default branch, lwt will use $default_branch_ref unless you pass --onto <branch>."
+      printf '%s\t%s\n' "$default_branch_ref" "repo default branch fallback"
+      return 0
+    fi
+
     lwt::ui::error "No remembered parent for this worktree. Re-run with --onto <branch>."
     return 1
   fi
@@ -1068,7 +1104,7 @@ lwt::cmd::restack() {
   # us rebase onto the wrong parent state even when the remembered branch is right.
   lwt::git::fetch_if_stale 0
 
-  target_info=$(lwt::restack::resolve_target "$current_wt" "$explicit_target") || return 1
+  target_info=$(lwt::restack::resolve_target "$current_wt" "$branch" "$explicit_target" "$assume_yes") || return 1
   IFS=$'\t' read -r target_ref target_source <<< "$target_info"
 
   target_branch_name=$(lwt::git::branch_name_from_ref "$target_ref" 2>/dev/null || true)
@@ -1091,7 +1127,7 @@ lwt::cmd::restack() {
   if (( target_behind_count == 0 )); then
     lwt::ui::success "$branch is already up to date with $target_ref."
     if (( branch_ahead_count > 0 )); then
-      lwt::ui::detail "ahead" "$(lwt::utils::count_noun "$branch_ahead_count" "commit") still ahead of target"
+      lwt::ui::detail "ahead" "$(lwt::utils::count_noun "$branch_ahead_count" "commit") still ahead of $target_ref"
     fi
     lwt::ui::detail "path" "$current_wt"
     return 0
@@ -1101,8 +1137,8 @@ lwt::cmd::restack() {
   echo "  branch: ${_lwt_bold}$branch${_lwt_reset}"
   echo "  onto:   ${_lwt_bold}$target_ref${_lwt_reset}"
   echo "  source: ${_lwt_dim}$target_source${_lwt_reset}"
-  echo "  behind: ${_lwt_dim}$(lwt::utils::count_noun "$target_behind_count" "commit") behind target${_lwt_reset}"
-  echo "  ahead:  ${_lwt_dim}$(lwt::utils::count_noun "$branch_ahead_count" "commit") ahead of target${_lwt_reset}"
+  echo "  behind: ${_lwt_dim}$(lwt::utils::count_noun "$target_behind_count" "commit") behind $target_ref${_lwt_reset}"
+  echo "  ahead:  ${_lwt_dim}$(lwt::utils::count_noun "$branch_ahead_count" "commit") ahead of $target_ref${_lwt_reset}"
   echo "  action: ${_lwt_dim}git rebase $target_ref${_lwt_reset}"
   echo
 
