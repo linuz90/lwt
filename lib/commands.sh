@@ -310,7 +310,16 @@ lwt::cmd::switch() {
       return 1
     fi
 
-    dir=$(lwt::worktree::display_rows true | fzf --ansi --height 40% --reverse --select-1 \
+    local rows
+    rows=$(lwt::worktree::display_rows true)
+    # Only the main worktree exists — nothing to switch to
+    if [[ -z "$rows" ]] || [[ $(echo "$rows" | wc -l) -le 1 ]]; then
+      lwt::ui::step "No linked worktrees found."
+      lwt::ui::hint "Use lwt add <branch> to create one."
+      return 0
+    fi
+
+    dir=$(echo "$rows" | fzf --ansi --height 40% --reverse --select-1 \
       --query="$query" --delimiter='\t' --with-nth=2.. | awk -F'\t' '{print $1}')
   fi
 
