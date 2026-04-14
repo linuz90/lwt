@@ -36,6 +36,23 @@ lwt::status::warn_gh_limitations() {
   LWT_GH_NOTICE_PRINTED=1
 }
 
+lwt::status::pr_has_conflicts() {
+  local mergeable="$1"
+  local merge_state="$2"
+
+  # GitHub can briefly lag one field while the other already reflects the
+  # conflict, so use both to keep list/switch/checkout aligned with merge.
+  [[ "$mergeable" == "CONFLICTING" || "$merge_state" == "DIRTY" ]]
+}
+
+lwt::status::print_pr_conflict_flag() {
+  local mergeable="$1"
+  local merge_state="$2"
+
+  lwt::status::pr_has_conflicts "$mergeable" "$merge_state" || return 0
+  printf ' %s⚠ PR conflicts%s' "$_lwt_red" "$_lwt_reset"
+}
+
 lwt::status::is_merged() {
   local branch="$1"
   local dir="${2:-}"  # optional worktree dir for SHA verification
@@ -93,15 +110,15 @@ lwt::status::for_worktree() {
   fi
 
   # show open PR number if pre-fetched data is available (via LWT_OPEN_PRS_FILE)
-  # file format: branch_name\tPR #N\turl (one per line)
+  # file format: branch_name\tPR #N\turl\tmergeable\tmergeStateStatus
   if [[ -n "$LWT_OPEN_PRS_FILE" && -s "$LWT_OPEN_PRS_FILE" ]]; then
-    local _pr_label _pr_url _pr_line
-    _pr_line=$(awk -F'\t' -v b="$branch" '$1 == b { print $2 "\t" $3; exit }' "$LWT_OPEN_PRS_FILE" 2>/dev/null)
+    local _pr_label _pr_url _pr_mergeable _pr_merge_state _pr_line
+    _pr_line=$(awk -F'\t' -v b="$branch" '$1 == b { print $2 "\t" $3 "\t" $4 "\t" $5; exit }' "$LWT_OPEN_PRS_FILE" 2>/dev/null)
     if [[ -n "$_pr_line" ]]; then
-      _pr_label="${_pr_line%%$'\t'*}"
-      _pr_url="${_pr_line#*$'\t'}"
+      IFS=$'\t' read -r _pr_label _pr_url _pr_mergeable _pr_merge_state <<< "$_pr_line"
       # OSC 8 hyperlink: clickable in supported terminals (iTerm2, Ghostty, etc.)
       printf ' %s\e]8;;%s\e\\%s\e]8;;\e\\%s' "$_lwt_dim" "$_pr_url" "$_pr_label" "$_lwt_reset"
+      lwt::status::print_pr_conflict_flag "$_pr_mergeable" "$_pr_merge_state"
     fi
   fi
 }

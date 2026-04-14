@@ -112,6 +112,7 @@ If an agent or script is driving `lwt`, prefer explicit targets over picker flow
 - `lwt path <branch>` prints the exact absolute path for an existing worktree
 - `lwt ls --porcelain` prints stable `path<TAB>branch` pairs for scripts
 - `lwt ls` and the interactive `lwt switch` picker show remembered parent info as `← parent: <branch>` when available
+- human-readable `lwt ls`, the interactive `lwt switch` picker, and `lwt checkout` show a red `⚠ PR conflicts` badge when GitHub already reports a conflicted open PR
 - `lwt ls --porcelain` stays stable for scripts and omits stack annotations
 
 Example stacked label in human-readable output:
@@ -139,6 +140,7 @@ When `--from` or `--from-current` is used, `lwt` only applies that start point w
 - **dirty** — uncommitted changes in the worktree
 - **unpushed** — local commits not yet on the remote
 - **behind** — remote has commits you haven't pulled
+- **PR conflicts** — GitHub says the open PR cannot merge cleanly; shown as a red `⚠ PR conflicts` badge in human-facing `list`, `switch`, and `checkout` output
 
 This matters most during `remove` — you'll see exactly what you'd lose before confirming.
 
@@ -151,6 +153,8 @@ This matters most during `remove` — you'll see exactly what you'd lose before 
 - after either path, it cleans up the source worktree and branch by default
 
 If GitHub rejects the PR merge because bypass/admin privileges are required, `lwt` keeps the error output visible and offers an interactive retry with `--admin`.
+
+If GitHub already reports the PR as conflicted, `lwt merge` fails before the confirmation prompt and points you back to the source worktree to resolve and push the branch first. In a real TTY with an installed agent, that conflict path can also offer to launch the agent directly in the source worktree with a targeted prompt. The same GitHub conflict signal also powers the red `⚠ PR conflicts` badge in `lwt ls`, `lwt switch`, and `lwt checkout`.
 
 By default it merges into:
 
@@ -188,6 +192,8 @@ Safety checks run before any history rewrite:
 
 Before confirming, `lwt restack` also shows how many commits the current branch is behind and ahead of the chosen target so the rewrite is explicit in plain Git terms. If the branch is already up to date with the target, `lwt` exits cleanly without prompting or rebasing.
 
+When `git merge-tree` predicts content conflicts against the chosen target, that same summary also shows a red likely-conflicts warning before you confirm. This is a preflight heuristic, not a full dry-run rebase, so treat it as early warning rather than a guarantee.
+
 For older worktrees that predate remembered default-branch metadata, `lwt restack` warns first and uses the repo default branch in the restack summary unless you pass `--onto`. That keeps the stale-branch-on-`main` case convenient without making `--yes` or automation silently guess.
 
 Typical usage:
@@ -205,6 +211,8 @@ If the rebase hits conflicts, `lwt` stops immediately and leaves you in the norm
 git rebase --continue
 git rebase --abort
 ```
+
+In a real TTY with an installed agent, that conflict path can also offer to launch the agent directly in the conflicted worktree with a targeted prompt.
 
 ## AI Agent Launch
 

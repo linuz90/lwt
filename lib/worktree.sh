@@ -259,13 +259,14 @@ lwt::worktree::display_rows() {
   main_dir="${records[1]%%$'\t'*}"
   tmpdir=$(mktemp -d)
 
-  # batch-fetch all open PR head branches in a single API call (used by for_worktree)
-  # runs before parallel subshells so the file is ready when they read it
+  # Batch-fetch open PR metadata once so row rendering can show PR links and
+  # conflict badges without one GitHub call per worktree.
   export LWT_OPEN_PRS_FILE="$tmpdir/_open_prs"
   touch "$LWT_OPEN_PRS_FILE"
   lwt::status::init_gh_mode
   if [[ "$LWT_GH_MODE" == "ok" ]]; then
-    gh pr list --state open --limit 100 --json headRefName,number,url -q '.[] | "\(.headRefName)\tPR #\(.number)\t\(.url)"' \
+    gh pr list --state open --limit 100 --json headRefName,number,url,mergeable,mergeStateStatus \
+      -q '.[] | "\(.headRefName)\tPR #\(.number)\t\(.url)\t\(.mergeable // "")\t\(.mergeStateStatus // "")"' \
       > "$LWT_OPEN_PRS_FILE" 2>/dev/null
   fi
 

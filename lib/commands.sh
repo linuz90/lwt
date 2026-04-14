@@ -352,7 +352,7 @@ lwt::cmd::switch() {
 }
 
 lwt::checkout::print_candidates() {
-  local record wt_path branch title number
+  local record wt_path branch title number mergeable merge_state conflict_flag
   local -A worktree_paths=()
 
   while IFS= read -r record; do
@@ -365,16 +365,22 @@ lwt::checkout::print_candidates() {
   lwt::status::init_gh_mode
   [[ "$LWT_GH_MODE" != "ok" ]] && return 1
 
-  while IFS=$'\t' read -r branch number title; do
+  while IFS=$'\t' read -r branch number title mergeable merge_state; do
     [[ -z "$branch" ]] && continue
     [[ -n "${worktree_paths[$branch]}" ]] && continue
+
+    conflict_flag=""
+    if lwt::status::pr_has_conflicts "$mergeable" "$merge_state"; then
+      conflict_flag=" ${_lwt_red}⚠ PR conflicts${_lwt_reset}"
+    fi
 
     printf 'pr\t%s\t%sPR #%-5s%s  %s%s%s  %s\n' \
       "$branch" \
       "$_lwt_orange" "$number" "$_lwt_reset" \
       "$_lwt_bold" "$branch" "$_lwt_reset" \
-      "$title"
-  done < <(gh pr list --state open --limit 100 --json headRefName,number,title -q '.[] | "\(.headRefName)\t\(.number)\t\(.title)"' 2>/dev/null)
+      "$title$conflict_flag"
+  done < <(gh pr list --state open --limit 100 --json headRefName,number,title,mergeable,mergeStateStatus \
+    -q '.[] | "\(.headRefName)\t\(.number)\t\(.title)\t\(.mergeable // "")\t\(.mergeStateStatus // "")"' 2>/dev/null)
 }
 
 lwt::cmd::checkout() {
@@ -1018,6 +1024,23 @@ lwt::restack::resolve_target() {
   printf '%s\t%s\n' "$normalized_branch_ref" "remembered parent"
 }
 
+lwt::restack::likely_conflict_paths() {
+  local worktree="$1"
+  local target_ref="$2"
+  local merge_tree_output=""
+
+  [[ -n "$worktree" && -n "$target_ref" ]] || return 1
+  lwt::deps::has git || return 1
+
+  # This is intentionally a cheap preflight heuristic, not a full dry-run
+  # rebase. merge-tree catches common content conflicts before prompting while
+  # avoiding the cost and repo churn of replaying commits in a throwaway clone.
+  merge_tree_output=$(git -C "$worktree" merge-tree --write-tree --name-only --messages "$target_ref" HEAD 2>/dev/null || true)
+  [[ -n "$merge_tree_output" ]] || return 0
+
+  printf '%s\n' "$merge_tree_output" | sed -nE 's/^CONFLICT \([^)]*\): .* in (.+)$/\1/p' | awk '!seen[$0]++'
+}
+
 lwt::cmd::restack() {
   local assume_yes=false
   local explicit_target=""
@@ -1033,6 +1056,8 @@ lwt::cmd::restack() {
   local branch_ahead_count=0
   local in_progress_operation=""
   local confirm_exit=0
+  local -a likely_conflict_paths=()
+  local likely_conflict_summary=""
 
   while (( $# > 0 )); do
     case "$1" in
@@ -1142,12 +1167,20 @@ lwt::cmd::restack() {
     return 0
   fi
 
+  likely_conflict_paths=("${(@f)$(lwt::restack::likely_conflict_paths "$current_wt" "$target_ref" 2>/dev/null || true)}")
+  if (( ${#likely_conflict_paths[@]} == 1 )); then
+    likely_conflict_summary="likely conflict in ${likely_conflict_paths[1]}"
+  elif (( ${#likely_conflict_paths[@]} > 1 )); then
+    likely_conflict_summary="likely conflicts in $(lwt::utils::count_noun "${#likely_conflict_paths[@]}" "file")"
+  fi
+
   lwt::ui::header "Restack worktree"
   echo "  branch: ${_lwt_bold}$branch${_lwt_reset}"
   echo "  onto:   ${_lwt_bold}$target_ref${_lwt_reset}"
   echo "  source: ${_lwt_dim}$target_source${_lwt_reset}"
   echo "  behind: ${_lwt_dim}$(lwt::utils::count_noun "$target_behind_count" "commit") behind $target_ref${_lwt_reset}"
   echo "  ahead:  ${_lwt_dim}$(lwt::utils::count_noun "$branch_ahead_count" "commit") ahead of $target_ref${_lwt_reset}"
+  [[ -n "$likely_conflict_summary" ]] && echo "  risk:   ${_lwt_red}$likely_conflict_summary${_lwt_reset}"
   echo "  action: ${_lwt_dim}git rebase $target_ref${_lwt_reset}"
   echo
 
@@ -1161,6 +1194,7 @@ lwt::cmd::restack() {
   if ! git -C "$current_wt" rebase "$target_ref"; then
     if [[ "$(lwt::git::operation_in_progress "$current_wt" 2>/dev/null || true)" == "rebase" ]]; then
       lwt::ui::error "Rebase stopped with conflicts in $current_wt."
+      lwt::agent::offer_conflict_help "$current_wt" "$(lwt::agent::continue_rebase_prompt "$current_wt" "$branch" "$target_ref")"
       lwt::ui::hint "Resolve them there, then run git rebase --continue or git rebase --abort."
     else
       lwt::ui::error "git rebase $target_ref failed in $current_wt."
@@ -1199,6 +1233,18 @@ lwt::merge::open_pr_metadata() {
 
   gh pr list --head "$branch" --state open --json number,title,baseRefName,url \
     -q '.[0] // empty | "\(.number)\t\(.title)\t\(.baseRefName)\t\(.url)"' 2>/dev/null
+}
+
+lwt::merge::pr_mergeability_metadata() {
+  local pr_number="$1"
+
+  [[ -n "$pr_number" ]] || return 1
+
+  lwt::status::init_gh_mode
+  [[ "$LWT_GH_MODE" == "ok" ]] || return 1
+
+  gh pr view "$pr_number" --json mergeable,mergeStateStatus \
+    -q '[.mergeable // "", .mergeStateStatus // ""] | @tsv' 2>/dev/null
 }
 
 lwt::merge::ensure_local_branch() {
@@ -1494,6 +1540,8 @@ lwt::cmd::merge() {
   local open_pr_title=""
   local open_pr_base=""
   local open_pr_url=""
+  local open_pr_mergeable=""
+  local open_pr_merge_state=""
   local merge_completed=false
 
   worktree_changed=$(git -C "$worktree" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
@@ -1529,6 +1577,26 @@ lwt::cmd::merge() {
       lwt::ui::error "Main worktree has uncommitted changes. Keep it clean before merging."
       return 1
     }
+  fi
+
+  if [[ -n "$open_pr_number" ]]; then
+    IFS=$'\t' read -r open_pr_mergeable open_pr_merge_state <<< "$(lwt::merge::pr_mergeability_metadata "$open_pr_number" 2>/dev/null || true)"
+
+    # GitHub reports conflicting PRs through both fields, and mergeStateStatus
+    # tends to stay accurate even when mergeable is briefly lagging.
+    if [[ "$open_pr_mergeable" == "CONFLICTING" || "$open_pr_merge_state" == "DIRTY" ]]; then
+      lwt::ui::error "Open PR #$open_pr_number cannot be merged cleanly into $target_branch."
+      # Surface the PR here so the conflict path can jump straight into GitHub.
+      if [[ -n "$open_pr_url" ]]; then
+        printf '  PR:     %s\e]8;;%s\e\\#%s\e]8;;\e\\%s %s\n' \
+          "$_lwt_dim" "$open_pr_url" "$open_pr_number" "$_lwt_reset" "$open_pr_title" >&2
+      fi
+      lwt::ui::hint "GitHub reports mergeable=${open_pr_mergeable:-unknown}, mergeStateStatus=${open_pr_merge_state:-unknown}."
+      lwt::ui::hint "Try: cd $(lwt::shell::quote "$worktree") && lwt restack --onto $target_branch"
+      lwt::agent::offer_conflict_help "$worktree" "$(lwt::agent::restack_prompt "$worktree" "$branch" "$target_branch")"
+      lwt::ui::hint "Resolve the conflicts in $worktree, push $branch, then rerun lwt merge."
+      return 1
+    fi
   fi
 
   commit_subject=$(lwt::merge::commit_subject "$worktree" "$branch" "$target_branch")
@@ -1607,7 +1675,13 @@ lwt::cmd::merge() {
     previous_main_branch=$(git -C "$main_wt" branch --show-current 2>/dev/null)
 
     if ! git -C "$worktree" rebase "$target_branch"; then
-      lwt::ui::error "Rebase onto $target_branch failed."
+      if [[ "$(lwt::git::operation_in_progress "$worktree" 2>/dev/null || true)" == "rebase" ]]; then
+        lwt::ui::error "Rebase onto $target_branch stopped with conflicts in $worktree."
+        lwt::agent::offer_conflict_help "$worktree" "$(lwt::agent::continue_rebase_prompt "$worktree" "$branch" "$target_branch")"
+        lwt::ui::hint "Resolve the rebase there, then run git rebase --continue or git rebase --abort."
+      else
+        lwt::ui::error "Rebase onto $target_branch failed."
+      fi
       lwt::ui::hint "Resolve the rebase inside $worktree, then rerun lwt merge."
       return 1
     fi

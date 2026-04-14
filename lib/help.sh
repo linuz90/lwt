@@ -141,6 +141,7 @@ lwt::ui::help_switch() {
   echo
   lwt::ui::header "Notes"
   echo "  ${_lwt_dim}Interactive picker rows include remembered parents as ← parent: <branch> when available.${_lwt_reset}"
+  echo "  ${_lwt_dim}When a linked worktree's PR is conflicted on GitHub, the row also shows a PR conflicts badge.${_lwt_reset}"
   echo "  ${_lwt_dim}Exact-match switch output also prints a parent: line when the target worktree remembers one.${_lwt_reset}"
   echo "  ${_lwt_dim}When the target resolves, lwt prints the exact absolute worktree path.${_lwt_reset}"
 }
@@ -155,6 +156,7 @@ lwt::ui::help_checkout() {
   echo
   lwt::ui::header "Notes"
   echo "  ${_lwt_dim}Shows only open PRs that do not already have a worktree.${_lwt_reset}"
+  echo "  ${_lwt_dim}Rows show a PR conflicts badge when GitHub already reports merge conflicts.${_lwt_reset}"
   echo "  ${_lwt_dim}Use switch to move to an existing worktree.${_lwt_reset}"
   echo "  ${_lwt_dim}Use add when you want to create a worktree from an explicit branch name.${_lwt_reset}"
   echo "  ${_lwt_dim}When checkout creates a new worktree, post-create and post-switch hooks run automatically.${_lwt_reset}"
@@ -171,6 +173,7 @@ lwt::ui::help_list() {
   lwt::ui::header "Notes"
   echo "  ${_lwt_dim}Shows all worktrees with remote-aware status and their absolute paths.${_lwt_reset}"
   echo "  ${_lwt_dim}Human-readable rows include remembered parents as ← parent: <branch> when available.${_lwt_reset}"
+  echo "  ${_lwt_dim}Open PR rows also show a PR conflicts badge when GitHub already reports merge conflicts.${_lwt_reset}"
   echo "  ${_lwt_dim}--porcelain stays stable for scripts and omits stack annotations.${_lwt_reset}"
 }
 
@@ -198,6 +201,8 @@ lwt::ui::help_merge() {
   lwt::ui::header "Notes"
   echo "  ${_lwt_dim}With an open PR: gh pr merge --squash, then local cleanup.${_lwt_reset}"
   echo "  ${_lwt_dim}Without a PR: local rebase, squash, push, then cleanup.${_lwt_reset}"
+  echo "  ${_lwt_dim}If GitHub already reports PR conflicts, lwt stops before prompting so you can fix the branch first.${_lwt_reset}"
+  echo "  ${_lwt_dim}In a real TTY with an installed agent, conflict paths can offer to launch that agent directly in the source worktree.${_lwt_reset}"
   echo "  ${_lwt_dim}If GitHub says bypass/admin is required, lwt offers an interactive retry with --admin.${_lwt_reset}"
 }
 
@@ -223,8 +228,10 @@ lwt::ui::help_restack() {
   echo "  ${_lwt_dim}Fails closed on dirty worktrees, detached HEAD, in-progress Git operations, unresolved targets, and same-branch targets.${_lwt_reset}"
   echo "  ${_lwt_dim}Older worktrees without remembered metadata can still fall back to the repo default branch in the summary.${_lwt_reset}"
   echo "  ${_lwt_dim}The confirmation summary shows behind/ahead counts relative to the chosen target before rebasing.${_lwt_reset}"
+  echo "  ${_lwt_dim}When git merge-tree predicts content conflicts, the summary also shows a red likely-conflicts warning before prompting.${_lwt_reset}"
   echo "  ${_lwt_dim}If the branch is already up to date with the target, lwt exits without prompting or rebasing.${_lwt_reset}"
   echo "  ${_lwt_dim}On conflicts, lwt leaves you in the normal git rebase flow for that worktree.${_lwt_reset}"
+  echo "  ${_lwt_dim}In a real TTY with an installed agent, conflict paths can offer to launch that agent directly in the worktree.${_lwt_reset}"
 }
 
 lwt::ui::help_remove() {

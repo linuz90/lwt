@@ -24,6 +24,7 @@ typeset -g LWT_GH_NOTICE_PRINTED=0
 typeset -g LWT_LAST_WORKTREE_PATH=""
 typeset -g LWT_LAST_WORKTREE_CREATED_NEW_BRANCH="false"
 typeset -g LWT_LAST_GH_MERGE_OUTPUT=""
+typeset -g LWT_LAST_SELECTED_AGENT=""
 
 lwt::deps::has() {
   command -v "$1" >/dev/null 2>&1

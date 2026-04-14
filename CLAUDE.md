@@ -26,6 +26,7 @@ For interactive commands such as `merge`, `remove`, `rename`, `restack`, and `cl
   - No PR exists: fall back to the local squash-merge flow
 - When a PR exists, GitHub is the source of truth. Do not replace the PR merge with a local `git merge --squash` flow that only approximates the result.
 - Keep the UX explicit about which path is being used.
+- If GitHub already reports the PR as conflicted, fail before the confirmation prompt with a clear conflict message that points back to the source worktree.
 - If GitHub requires bypass/admin privileges, keep that explicit and preserve a clear `--admin` path.
 - The local fallback path requires a clean main worktree because it modifies it directly.
 - The PR path should not be blocked by a dirty main worktree; dirtiness only affects syncing local `main` afterward.
@@ -56,6 +57,7 @@ Keep modules as pure function definitions and shared globals. Do not source indi
 - `lwt add <branch>` should stay non-interactive when the branch already exists locally or on `origin`; checking out an existing branch is the expected path, not a risky edge case.
 - `lwt add` should default to the repo default branch, with explicit ancestry behind opt-in flags such as `--from <ref>` or `--from-current`.
 - Once a branch has remembered parent metadata, `lwt list` and the `lwt switch` picker should surface it by default as `← parent: <branch>`; use that explicit label shape rather than a bare arrow/value pair.
+- Human-facing `lwt list`, `lwt switch`, and `lwt checkout` output should surface conflicted open PRs as a red `⚠ PR conflicts` badge, but `--porcelain` output should stay stable and omit that annotation.
 - `lwt restack` should stay scoped to the current linked worktree. Automatic target selection applies to branches created with `lwt add --from <branch>` and to branches `lwt add` created from the repo default branch. Older worktrees without remembered metadata may fall back to the repo default branch in the restack summary, but automation should still stay explicit with `--onto`.
 - Agent-facing flows should print absolute worktree paths explicitly; do not rely on in-process `cd` state or path-free summaries.
 - `lwt remove` should preserve a clear automation path: `--yes` skips the delete prompt, `--force` handles dirty/unmerged local cleanup, and remote cleanup stays explicit behind `--delete-remote`.
