@@ -135,6 +135,43 @@ lwt::worktree::stack_label() {
   fi
 }
 
+lwt::worktree::location_hint() {
+  local worktree_path="$1"
+  local codex_root="${HOME}/.codex/worktrees/"
+  local rest codex_id
+
+  [[ -n "$worktree_path" ]] || return 1
+
+  if [[ "$worktree_path" == "$codex_root"* ]]; then
+    rest="${worktree_path#"$codex_root"}"
+    codex_id="${rest%%/*}"
+    if [[ -n "$codex_id" && "$codex_id" != "$rest" ]]; then
+      printf 'codex/%s' "$codex_id"
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+lwt::worktree::detached_label() {
+  local worktree_path="$1"
+  local short_head=""
+  local location_hint=""
+
+  [[ -n "$worktree_path" ]] || return 1
+
+  short_head=$(git -C "$worktree_path" rev-parse --short=9 HEAD 2>/dev/null || true)
+  [[ -n "$short_head" ]] || short_head="unknown"
+
+  location_hint=$(lwt::worktree::location_hint "$worktree_path" 2>/dev/null || true)
+  if [[ -n "$location_hint" ]]; then
+    printf '(detached @ %s · %s)' "$short_head" "$location_hint"
+  else
+    printf '(detached @ %s)' "$short_head"
+  fi
+}
+
 lwt::worktree::create_branch() {
   local branch="$1"
   local confirm_existing="${2:-true}"
@@ -282,6 +319,7 @@ lwt::worktree::display_rows() {
 
       [[ "$wt_path" == "$current_dir" ]] && marker="* "
       [[ "$wt_path" == "$main_dir" ]] && label="$branch (repo)"
+      [[ "$branch" == "(detached)" ]] && label="$(lwt::worktree::detached_label "$wt_path")"
       flags=$(lwt::status::for_worktree "$wt_path" "$branch")
       if [[ "$include_stack" == "true" ]]; then
         stack_label=$(lwt::worktree::stack_label "$wt_path")

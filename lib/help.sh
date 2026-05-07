@@ -141,6 +141,7 @@ lwt::ui::help_switch() {
   echo
   lwt::ui::header "Notes"
   echo "  ${_lwt_dim}Interactive picker rows include remembered parents as ← parent: <branch> when available.${_lwt_reset}"
+  echo "  ${_lwt_dim}Detached rows include the short commit and known agent workspace hint when available.${_lwt_reset}"
   echo "  ${_lwt_dim}When a linked worktree's PR is conflicted on GitHub, the row also shows a PR conflicts badge.${_lwt_reset}"
   echo "  ${_lwt_dim}Exact-match switch output also prints a parent: line when the target worktree remembers one.${_lwt_reset}"
   echo "  ${_lwt_dim}When the target resolves, lwt prints the exact absolute worktree path.${_lwt_reset}"
@@ -173,6 +174,7 @@ lwt::ui::help_list() {
   lwt::ui::header "Notes"
   echo "  ${_lwt_dim}Shows all worktrees with remote-aware status and their absolute paths.${_lwt_reset}"
   echo "  ${_lwt_dim}Human-readable rows include remembered parents as ← parent: <branch> when available.${_lwt_reset}"
+  echo "  ${_lwt_dim}Detached rows include the short commit and known agent workspace hint when available.${_lwt_reset}"
   echo "  ${_lwt_dim}Open PR rows also show a PR conflicts badge when GitHub already reports merge conflicts.${_lwt_reset}"
   echo "  ${_lwt_dim}--porcelain stays stable for scripts and omits stack annotations.${_lwt_reset}"
 }
