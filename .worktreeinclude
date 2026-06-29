@@ -1,0 +1,3 @@
+# Local agent/app settings that should follow fresh managed worktrees.
+.claude/settings.local.json
+.codex/environments/environment.toml

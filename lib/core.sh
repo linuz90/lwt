@@ -149,6 +149,79 @@ lwt::utils::copy_env_files() {
   fi
 }
 
+lwt::utils::copy_worktreeinclude_files() {
+  local repo_root="$1"
+  local target="$2"
+  local include_file="$repo_root/.worktreeinclude"
+  local rel src dest dest_dir
+  local copied_count=0
+  local skipped_existing_count=0
+  local skipped_symlink_count=0
+  local skipped_unignored_count=0
+
+  [[ -f "$include_file" ]] || return 0
+
+  while IFS= read -r -d '' rel; do
+    [[ -n "$rel" ]] || continue
+
+    case "$rel" in
+      /*|../*|*/../*)
+        continue
+        ;;
+    esac
+
+    src="$repo_root/$rel"
+    dest="$target/$rel"
+
+    [[ -e "$src" || -L "$src" ]] || continue
+
+    # Managed-worktree tools only copy paths that are both included and
+    # gitignored. Keeping the same rule here makes .worktreeinclude portable.
+    if ! git -C "$repo_root" check-ignore -q -- "$rel"; then
+      ((skipped_unignored_count++))
+      continue
+    fi
+
+    if [[ -L "$src" ]]; then
+      ((skipped_symlink_count++))
+      continue
+    fi
+
+    [[ -f "$src" ]] || continue
+
+    if [[ -e "$dest" || -L "$dest" ]]; then
+      ((skipped_existing_count++))
+      continue
+    fi
+
+    dest_dir="$(dirname "$dest")"
+    mkdir -p "$dest_dir" || return 1
+    cp -p "$src" "$dest" || return 1
+    ((copied_count++))
+  done < <(git -C "$repo_root" ls-files -o -i --exclude-from="$include_file" -z 2>/dev/null)
+
+  if ((copied_count > 0)); then
+    local s="s"; ((copied_count == 1)) && s=""
+    lwt::ui::step "Copied $copied_count file$s from .worktreeinclude"
+  fi
+
+  if ((skipped_existing_count > 0)); then
+    local s="s"; ((skipped_existing_count == 1)) && s=""
+    lwt::ui::step "Skipped $skipped_existing_count existing file$s from .worktreeinclude"
+  fi
+
+  if ((skipped_symlink_count > 0)); then
+    local s="s"; ((skipped_symlink_count == 1)) && s=""
+    lwt::ui::warn "Skipped $skipped_symlink_count symlink$s from .worktreeinclude."
+  fi
+
+  if ((skipped_unignored_count > 0)); then
+    local s="s"; ((skipped_unignored_count == 1)) && s=""
+    lwt::ui::warn "Skipped $skipped_unignored_count file$s from .worktreeinclude that Git does not ignore."
+    lwt::ui::hint ".worktreeinclude copies only ignored local files; add the path to .gitignore or use copy-on-create."
+  fi
+}
+
 lwt::utils::is_actual_env_file() {
   local path="$1"
   local base="${path:t}"

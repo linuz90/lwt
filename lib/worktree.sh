@@ -270,7 +270,15 @@ lwt::worktree::create_branch() {
     lwt::ui::step "Created branch ${_lwt_bold}$branch${_lwt_reset}${_lwt_dim} from ${start_ref_label}"
   fi
 
-  lwt::utils::copy_env_files "$repo_root" "$target"
+  if [[ -f "$repo_root/.worktreeinclude" ]]; then
+    lwt::utils::copy_worktreeinclude_files "$repo_root" "$target" || {
+      lwt::ui::error "Failed to copy .worktreeinclude files."
+      return 1
+    }
+  else
+    lwt::utils::copy_env_files "$repo_root" "$target"
+  fi
+
   lwt::utils::copy_configured_paths "$repo_root" "$target" || {
     lwt::ui::error "Failed to copy configured create-time paths."
     return 1

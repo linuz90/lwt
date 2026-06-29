@@ -227,7 +227,7 @@ lwt::config::description() {
       printf 'Default target branch for merge flows\n'
       ;;
     copy-on-create)
-      printf 'Repeatable repo-relative path copied into new worktrees; directories copy recursively\n'
+      printf 'Repeatable repo-relative path copied after .worktreeinclude; directories copy recursively\n'
       ;;
     hook.*)
       printf 'Shell command run for %s\n' "${key#hook.}"
