@@ -47,14 +47,14 @@ lwt::ui::help_main() {
   echo "  lwt rs --yes                               ${_lwt_dim}Restack the current child worktree non-interactively${_lwt_reset}"
   echo "  lwt config show                            ${_lwt_dim}See effective settings and where they come from${_lwt_reset}"
   echo "  lwt config set dev-cmd \"pnpm dev\"         ${_lwt_dim}Persist the repo dev command${_lwt_reset}"
-  echo "  lwt config add copy-on-create apps/typefully-web/.browser-auth.json ${_lwt_dim}Copy extra project files into new worktrees${_lwt_reset}"
+  echo "  lwt config add copy-on-create apps/typefully-web/.browser-auth.json ${_lwt_dim}Copy an extra project file into new worktrees${_lwt_reset}"
   echo
   lwt::ui::header "Config"
   echo "  lwt config set editor zed                   ${_lwt_dim}Editor to open worktrees in${_lwt_reset}"
   echo "  lwt config set agent-mode yolo              ${_lwt_dim}Auto-approve all agent actions${_lwt_reset}"
   echo "  lwt config set dev-cmd \"pnpm dev\"          ${_lwt_dim}Default command for --dev${_lwt_reset}"
   echo "  lwt config set terminal ghostty             ${_lwt_dim}Preferred terminal driver for splits/tabs${_lwt_reset}"
-  echo "  lwt config add copy-on-create path/to/file  ${_lwt_dim}Repeatable repo-local copies for add/checkout${_lwt_reset}"
+  echo "  lwt config add copy-on-create path/to/file  ${_lwt_dim}Extra repo-local copies for add/checkout${_lwt_reset}"
 }
 
 lwt::ui::help_automation() {
@@ -119,13 +119,16 @@ lwt::ui::help_add() {
   echo "  ${_lwt_dim}--from-current uses the current commit only; uncommitted changes stay in the current worktree.${_lwt_reset}"
   echo "  ${_lwt_dim}If the branch already exists locally or on origin, lwt checks it out into a worktree instead of creating a new branch.${_lwt_reset}"
   echo "  ${_lwt_dim}If the target branch already exists, explicit start-point flags are rejected instead of being ignored.${_lwt_reset}"
+  echo "  ${_lwt_dim}If .worktreeinclude exists, lwt copies matching gitignored files without overwriting existing targets.${_lwt_reset}"
+  echo "  ${_lwt_dim}Without .worktreeinclude, lwt keeps its legacy fallback of copying actual .env files.${_lwt_reset}"
   echo "  ${_lwt_dim}After creation, lwt prints the absolute path and a ready-to-run cd command.${_lwt_reset}"
   echo "  ${_lwt_dim}First agent runs in your shell; additional agents open in splits automatically.${_lwt_reset}"
   echo "  ${_lwt_dim}Each agent flag takes its own prompt: --claude \"fix auth\" --codex \"review tests\"${_lwt_reset}"
   echo "  ${_lwt_dim}Hyphen aliases like --claude-codex share one prompt across all agents in the alias.${_lwt_reset}"
   echo "  ${_lwt_dim}When an agent flag is used, dependencies are always installed.${_lwt_reset}"
   echo "  ${_lwt_dim}Set dev-cmd for monorepos or non-standard dev commands with lwt config set dev-cmd ...${_lwt_reset}"
-  echo "  ${_lwt_dim}Use lwt config add copy-on-create <repo-path> for extra files or directories copied into new worktrees.${_lwt_reset}"
+  echo "  ${_lwt_dim}Use .worktreeinclude for shared ignored local files copied into new worktrees.${_lwt_reset}"
+  echo "  ${_lwt_dim}Use lwt config add copy-on-create <repo-path> for extra per-repo copies outside that contract.${_lwt_reset}"
   echo "  ${_lwt_dim}Configured directories copy recursively into the same relative path. Use hooks only for scripted logic.${_lwt_reset}"
   echo "  ${_lwt_dim}Split/tab automation currently supports Ghostty and iTerm2 on macOS.${_lwt_reset}"
   echo "  ${_lwt_dim}Set yolo globally with: lwt config set agent-mode yolo${_lwt_reset}"
@@ -312,8 +315,9 @@ lwt::ui::help_config() {
   echo "  ${_lwt_bold}dev-cmd${_lwt_reset}                       ${_lwt_dim}Local by default${_lwt_reset}"
   echo "  ${_lwt_bold}terminal${_lwt_reset}                      ${_lwt_dim}Global by default; auto, ghostty, iterm2${_lwt_reset}"
   echo "  ${_lwt_bold}merge-target${_lwt_reset}                  ${_lwt_dim}Local by default${_lwt_reset}"
-  echo "  ${_lwt_bold}copy-on-create${_lwt_reset}                ${_lwt_dim}Local by default; repeatable repo-relative file/dir copied by add/checkout${_lwt_reset}"
+  echo "  ${_lwt_bold}copy-on-create${_lwt_reset}                ${_lwt_dim}Local by default; repeatable repo-relative file/dir copied after .worktreeinclude${_lwt_reset}"
   echo
+  echo "  ${_lwt_dim}.worktreeinclude is the shared ignored-file contract for add/checkout when present.${_lwt_reset}"
   echo "  ${_lwt_dim}Directories configured in copy-on-create are copied recursively into the same relative path.${_lwt_reset}"
   echo "  ${_lwt_dim}Advanced hook settings exist, but they are intentionally hidden from the default output.${_lwt_reset}"
 }

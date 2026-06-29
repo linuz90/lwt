@@ -309,9 +309,21 @@ lwt config set terminal ghostty
 
 Use `lwt doctor` to confirm whether terminal automation is available and which driver was detected.
 
-## Copy Extra Files On Create
+## Copy Local Files On Create
 
-For simple project-specific bootstrapping, use `copy-on-create` instead of a hook.
+For shared ignored local files, add a root `.worktreeinclude`. It uses `.gitignore` syntax and is applied by both `lwt add` and `lwt checkout` after the Git worktree exists and before editors, terminals, agents, or hooks run.
+
+Only files that are also ignored by Git are copied. Existing files in the target worktree are left alone, and symlinks are skipped. If `.worktreeinclude` is present, it replaces the older automatic `.env*` copy behavior, so include env patterns explicitly when you want them:
+
+```gitignore
+.env
+.env.*
+apps/typefully-web/.browser-auth.json
+```
+
+When no `.worktreeinclude` exists, `lwt` keeps its legacy fallback and copies actual `.env` files such as `.env`, `.env.local`, and `.env.production.local`. Template/example files like `.env.example` are skipped.
+
+For extra local copies that should not be part of the shared `.worktreeinclude` contract, use `copy-on-create` instead of a hook.
 
 Each configured path is repo-relative:
 
@@ -325,7 +337,7 @@ This is the simplest way to seed extra local-only files like browser auth state:
 lwt config add copy-on-create apps/typefully-web/.browser-auth.json
 ```
 
-That applies to both `lwt add` and `lwt checkout`, after actual `.env` files (for example `.env`, `.env.local`, `.env.production.local`) are copied and before editors, terminals, or agents launch. Template/example files like `.env.example` are skipped.
+That applies to both `lwt add` and `lwt checkout`, after `.worktreeinclude` files or the legacy `.env*` fallback are copied.
 
 Use hooks only when you need conditional or scripted behavior.
 
@@ -493,7 +505,7 @@ Supported keys:
 - `dev-cmd`
 - `terminal`
 - `merge-target`
-- `copy-on-create` (repeatable, repo-relative path copied by `add` and `checkout`)
+- `copy-on-create` (repeatable, repo-relative path copied by `add` and `checkout` after `.worktreeinclude`)
 
 `lwt config show` intentionally hides advanced/internal settings. The default view is meant to stay small.
 

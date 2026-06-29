@@ -61,6 +61,7 @@ Keep modules as pure function definitions and shared globals. Do not source indi
 - `lwt restack` should stay scoped to the current linked worktree. Automatic target selection applies to branches created with `lwt add --from <branch>` and to branches `lwt add` created from the repo default branch. Older worktrees without remembered metadata may fall back to the repo default branch in the restack summary, but automation should still stay explicit with `--onto`.
 - Agent-facing flows should print absolute worktree paths explicitly; do not rely on in-process `cd` state or path-free summaries.
 - `lwt remove` should preserve a clear automation path: `--yes` skips the delete prompt, `--force` handles dirty/unmerged local cleanup, and remote cleanup stays explicit behind `--delete-remote`.
+- `lwt add` and `lwt checkout` should honor root `.worktreeinclude` before `copy-on-create`: copy only files matched by `.worktreeinclude` and ignored by Git, skip symlinks and existing targets, and use the legacy actual `.env*` copy fallback only when `.worktreeinclude` is absent.
 - The first-contact UX for `lwt` / `lwt --help` should teach automation-safe patterns early because agents discover the tool through help output, not just humans.
 
 ## Dependencies
